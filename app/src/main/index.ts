@@ -2,6 +2,10 @@ import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Notification } from "electron";
 import { CHANNELS } from "../shared/ipc.js";
 import { EngineService } from "./engineService.js";
+import { fixPath } from "./fixPath.js";
+
+// GUI apps don't inherit the shell PATH — repair it so codex/git/etc. resolve.
+fixPath();
 
 let engine: EngineService;
 let win: BrowserWindow | null = null;
@@ -43,6 +47,26 @@ function createWindow(): void {
   } else {
     void win.loadFile(join(__dirname, "../renderer/index.html"));
   }
+
+  // Surface renderer/preload failures in the terminal (they're otherwise only in DevTools).
+  win.webContents.on("did-finish-load", () => console.error("[main] renderer loaded OK"));
+  win.webContents.on("preload-error", (_e, p, err) => console.error(`[preload-error] ${p}:`, err));
+  win.webContents.on("did-fail-load", (_e, code, desc) => console.error(`[did-fail-load] ${code} ${desc}`));
+  win.webContents.on("render-process-gone", (_e, d) => console.error("[render-gone]", d));
+  (win.webContents as unknown as { on: (e: string, cb: (...a: unknown[]) => void) => void }).on(
+    "console-message",
+    (...a: unknown[]) => {
+      const d = (a[1] && typeof a[1] === "object" ? a[1] : { level: a[1], message: a[2], lineNumber: a[3], sourceId: a[4] }) as {
+        level: unknown;
+        message: string;
+        lineNumber: number;
+        sourceId: string;
+      };
+      if (d.level === "error" || d.level === 3 || d.level === 2) {
+        console.error(`[renderer] ${d.message} @ ${d.sourceId}:${d.lineNumber}`);
+      }
+    },
+  );
 
   const off = engine.onChange((e) => {
     if (!win || win.isDestroyed()) return;

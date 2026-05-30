@@ -150,7 +150,13 @@ export default function App() {
       </div>
 
       <div className="compose">
-        <NewTask executors={executors} defaultExecutor={defaultExecutor} onDispatch={dispatch} onReview={review} />
+        <NewTask
+          executors={executors}
+          defaultExecutor={defaultExecutor}
+          isRepo={project?.isRepo ?? false}
+          onDispatch={dispatch}
+          onReview={review}
+        />
       </div>
 
       <StatusBar tasks={list} project={project} defaultExecutor={defaultExecutor} />

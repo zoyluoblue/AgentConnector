@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ExecutorInfo, Isolation, SandboxMode, StartInput, StartResult } from "../types";
 
 const SANDBOXES: { v: SandboxMode; label: string }[] = [
@@ -10,11 +10,13 @@ const SANDBOXES: { v: SandboxMode; label: string }[] = [
 export function NewTask({
   executors,
   defaultExecutor,
+  isRepo,
   onDispatch,
   onReview,
 }: {
   executors: ExecutorInfo[];
   defaultExecutor: string;
+  isRepo: boolean;
   onDispatch: (input: StartInput) => Promise<StartResult>;
   onReview: () => Promise<StartResult>;
 }) {
@@ -27,6 +29,11 @@ export function NewTask({
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // worktree isolation needs git; fall back to in-place for non-git projects.
+  useEffect(() => {
+    if (!isRepo && isolation === "worktree") setIsolation("inplace");
+  }, [isRepo, isolation]);
 
   async function dispatch() {
     if (!prompt.trim()) return;
@@ -78,7 +85,9 @@ export function NewTask({
           <label className="field">隔离</label>
           <select value={isolation} onChange={(e) => setIsolation(e.target.value as Isolation)}>
             <option value="inplace">就地</option>
-            <option value="worktree">worktree</option>
+            <option value="worktree" disabled={!isRepo}>
+              worktree{!isRepo ? "（需 git）" : ""}
+            </option>
           </select>
         </div>
         <div>

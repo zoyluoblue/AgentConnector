@@ -18,7 +18,7 @@ export function StatusBar({
       <span>失败 {count("error")}</span>
       <span className="spacer" style={{ flex: 1 }} />
       <span>默认执行器: {defaultExecutor}</span>
-      {project && <span>{project.isRepo ? `git: ${project.branch ?? "(detached)"}${project.dirty ? ` ✎${project.dirty}` : ""}` : "非 git 目录"}</span>}
+      {project && <span>{project.isRepo ? `git: ${project.branch ?? "(detached)"}${project.dirty ? ` ✎${project.dirty}` : ""}` : "非 git · 文件快照对比改动"}</span>}
     </div>
   );
 }
