@@ -28,7 +28,7 @@ export function NewRun({ isRepo, onStart }: { isRepo: boolean; onStart: (input: 
   return (
     <div>
       <div className="section">
-        <h3>新建编排 Run</h3>
+        <h3>新建 Task</h3>
         <textarea
           rows={8}
           placeholder="描述高层目标。Claude 会拆成阶段（含代码/UI规划+验收标准），Codex 逐阶段执行，Claude 审查，循环至完成…"
@@ -51,7 +51,7 @@ export function NewRun({ isRepo, onStart }: { isRepo: boolean; onStart: (input: 
 
       <div className="actions">
         <button className="primary" disabled={busy || !goal.trim()} onClick={start}>
-          {busy ? "启动中…" : "▶ 启动 Run"}
+          {busy ? "启动中…" : "▶ 启动 Task"}
         </button>
       </div>
       {!isRepo && <div className="muted" style={{ marginTop: 8 }}>非 git 目录也可：改动用文件快照对比。</div>}

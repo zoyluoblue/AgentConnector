@@ -1,24 +1,24 @@
-import type { ProjectInfo, TaskView } from "../types";
+import type { ProjectInfo, Run } from "../types";
 
 export function StatusBar({
-  tasks,
+  runs,
   project,
   defaultExecutor,
 }: {
-  tasks: TaskView[];
+  runs: Run[];
   project: ProjectInfo | null;
   defaultExecutor: string;
 }) {
-  const count = (s: string) => tasks.filter((t) => t.state === s).length;
+  const c = (pred: (r: Run) => boolean) => runs.filter(pred).length;
   return (
     <div className="status">
-      <span>运行 {count("running")}</span>
-      <span>排队 {count("queued")}</span>
-      <span>完成 {count("done")}</span>
-      <span>失败 {count("error")}</span>
+      <span>进行 {c((r) => r.status === "running" || r.status === "planning")}</span>
+      <span>完成 {c((r) => r.status === "done")}</span>
+      <span>待人工 {c((r) => r.status === "needs_human")}</span>
+      <span>失败 {c((r) => r.status === "failed")}</span>
       <span className="spacer" style={{ flex: 1 }} />
       <span>默认执行器: {defaultExecutor}</span>
-      {project && <span>{project.isRepo ? `git: ${project.branch ?? "(detached)"}${project.dirty ? ` ✎${project.dirty}` : ""}` : "非 git · 文件快照对比改动"}</span>}
+      {project && <span>{project.isRepo ? `git: ${project.branch ?? "(detached)"}` : "非 git · 文件快照对比"}</span>}
     </div>
   );
 }

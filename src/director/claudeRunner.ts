@@ -1,13 +1,10 @@
 import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { log } from "../util/log.js";
-import { cleanupTmpDir, createRunTmpDir } from "../util/tmp.js";
 
 export interface ClaudeRunOptions {
   prompt: string;
   cwd: string;
-  /** JSON Schema object -> `--json-schema` for structured output. */
+  /** JSON Schema object -> passed inline to `--json-schema` for structured output. */
   schema?: unknown;
   model?: string;
   /** Disallow edit tools (default true) so plan/review can't mutate the repo. */
@@ -27,27 +24,43 @@ export interface ClaudeRunResult {
   error?: string;
 }
 
+function tryParse(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Parse the `claude -p --output-format json` envelope. Pure + defensive (unit-tested). */
 export function parseClaudeEnvelope(out: string, err: string, code: number | null): ClaudeRunResult {
-  let env: Record<string, unknown>;
-  try {
-    env = JSON.parse(out) as Record<string, unknown>;
-  } catch {
-    return { ok: false, text: "", raw: out, error: `claude: non-JSON output (exit ${code}): ${(err || out).slice(0, 300)}` };
+  const trimmed = out.trim();
+  if (!trimmed) {
+    const e = err.trim();
+    return { ok: false, text: "", raw: out, error: `claude produced no output (exit ${code})${e ? `; stderr: ${e.slice(0, 300)}` : ""}` };
   }
-  const isError = env["is_error"] === true || env["subtype"] === "error" || env["type"] === "error";
-  const resultField = env["result"];
+
+  let env = tryParse(trimmed);
+  if (env === undefined) {
+    // fallback: a leading banner/notice line before the JSON — take the last non-empty line
+    const lines = trimmed.split("\n").map((l) => l.trim()).filter(Boolean);
+    env = tryParse(lines[lines.length - 1] ?? "");
+  }
+  if (env === undefined || typeof env !== "object") {
+    return { ok: false, text: "", raw: out, error: `claude: non-JSON output (exit ${code}): ${trimmed.slice(0, 300)}` };
+  }
+
+  const o = env as Record<string, unknown>;
+  const isError = o["is_error"] === true || o["subtype"] === "error" || o["type"] === "error";
+  const resultField = o["result"];
   const text = typeof resultField === "string" ? resultField : resultField !== undefined ? JSON.stringify(resultField) : "";
 
   let structured: unknown;
   if (resultField !== undefined && resultField !== null) {
     if (typeof resultField === "object") structured = resultField;
     else if (typeof resultField === "string") {
-      try {
-        structured = JSON.parse(resultField);
-      } catch {
-        /* result is plain text, not structured */
-      }
+      const s = tryParse(resultField);
+      if (s !== undefined) structured = s;
     }
   }
 
@@ -55,32 +68,28 @@ export function parseClaudeEnvelope(out: string, err: string, code: number | nul
     ok: !isError && code === 0,
     text,
     structured,
-    sessionId: typeof env["session_id"] === "string" ? (env["session_id"] as string) : undefined,
-    costUsd: typeof env["total_cost_usd"] === "number" ? (env["total_cost_usd"] as number) : undefined,
+    sessionId: typeof o["session_id"] === "string" ? (o["session_id"] as string) : undefined,
+    costUsd: typeof o["total_cost_usd"] === "number" ? (o["total_cost_usd"] as number) : undefined,
     raw: out,
-    error: isError ? String(env["error"] ?? text ?? "claude error") : undefined,
+    error: isError ? String(o["error"] ?? text ?? "claude error") : undefined,
   };
 }
 
-/** Run `claude -p` headlessly with optional schema + read-only enforcement. */
+/** Run `claude -p` headlessly with optional inline schema + read-only enforcement. */
 export async function runClaude(opts: ClaudeRunOptions): Promise<ClaudeRunResult> {
   const bin = opts.bin || process.env.AGENTCONNECTOR_CLAUDE_BIN || "claude";
-  const tmpDir = createRunTmpDir();
-  const argv = ["-p", "--output-format", "json"];
 
-  if (opts.schema !== undefined) {
-    const schemaFile = join(tmpDir, "schema.json");
-    writeFileSync(schemaFile, JSON.stringify(opts.schema), "utf8");
-    argv.push("--json-schema", schemaFile);
-  }
+  // Prompt is a positional arg (right after -p) to avoid any stdin-delivery race.
+  // --json-schema takes the schema INLINE (a JSON string), not a file path.
+  // The variadic --disallowedTools goes LAST so it only consumes the tool names.
+  const argv = ["-p", opts.prompt, "--output-format", "json"];
+  if (opts.schema !== undefined) argv.push("--json-schema", JSON.stringify(opts.schema));
   if (opts.model) argv.push("--model", opts.model);
-  // Keep edit tools last is unnecessary (we pass the prompt via stdin), but the
-  // variadic --disallowedTools must not be followed by a positional prompt.
-  if (opts.readOnly !== false) argv.push("--disallowedTools", "Edit", "Write", "NotebookEdit");
   argv.push("--add-dir", opts.cwd);
+  if (opts.readOnly !== false) argv.push("--disallowedTools", "Edit", "Write", "NotebookEdit");
 
   return new Promise<ClaudeRunResult>((resolve) => {
-    const child = spawn(bin, argv, { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"], env: process.env });
+    const child = spawn(bin, argv, { cwd: opts.cwd, stdio: ["ignore", "pipe", "pipe"], env: process.env });
     let out = "";
     let err = "";
     let settled = false;
@@ -88,7 +97,6 @@ export async function runClaude(opts: ClaudeRunOptions): Promise<ClaudeRunResult
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
-      cleanupTmpDir(tmpDir);
       resolve(r);
     };
     const timer = opts.timeoutMs
@@ -118,10 +126,5 @@ export async function runClaude(opts: ClaudeRunOptions): Promise<ClaudeRunResult
       finish({ ok: false, text: "", raw: out, error: String(e) });
     });
     child.on("close", (code) => finish(parseClaudeEnvelope(out, err, code)));
-
-    if (child.stdin) {
-      child.stdin.write(opts.prompt);
-      child.stdin.end();
-    }
   });
 }

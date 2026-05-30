@@ -120,8 +120,8 @@ function registerIpc(): void {
   ipcMain.handle(CHANNELS.pickProject, async () => {
     const target = win ?? BrowserWindow.getAllWindows()[0];
     const r = target
-      ? await dialog.showOpenDialog(target, { properties: ["openDirectory"] })
-      : await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      ? await dialog.showOpenDialog(target, { properties: ["openDirectory", "createDirectory"], buttonLabel: "选择此目录" })
+      : await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"], buttonLabel: "选择此目录" });
     if (r.canceled || !r.filePaths[0]) return null;
     return engine.setProject(r.filePaths[0]);
   });

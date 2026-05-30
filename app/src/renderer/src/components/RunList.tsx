@@ -11,7 +11,7 @@ export function RunList({
   onSelect: (id: string) => void;
 }) {
   if (runs.length === 0) {
-    return <div className="empty">还没有 Run。<br />在右侧新建一个 →</div>;
+    return <div className="empty">还没有 Task。<br />在右侧新建一个 →</div>;
   }
   return (
     <div>
