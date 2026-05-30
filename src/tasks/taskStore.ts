@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { Config, Isolation } from "../config.js";
 import { computeDiff } from "../diff/gitDiff.js";
+import { diffSnapshots, snapshotDir } from "../diff/snapshotDiff.js";
 import type { Executor, NormalizedEvent, RunExit, StartArgs } from "../executor/types.js";
 import { applyWorktree, createWorktree, isGitRepo, removeWorktree } from "../git/worktree.js";
 import { newTaskId } from "../util/ids.js";
@@ -184,6 +185,16 @@ export class TaskStore {
     }
     rec.cwd = cwd;
 
+    // For non-git in-place runs, snapshot the dir before the task so we can show
+    // changes without git (worktree runs always use git).
+    if (!rec.worktree && !(await isGitRepo(cwd))) {
+      try {
+        rec.preSnapshot = snapshotDir(cwd);
+      } catch (e) {
+        log.warn(`snapshot failed for ${rec.taskId}`, String(e));
+      }
+    }
+
     const handle = executor.start({ ...args, cwd });
     rec.handle = handle;
     rec.pid = handle.pid;
@@ -255,10 +266,13 @@ export class TaskStore {
     }
 
     try {
-      rec.diff = await computeDiff(rec.cwd, this.cfg.maxDiffBytes);
+      rec.diff = rec.preSnapshot
+        ? diffSnapshots(rec.cwd, rec.preSnapshot, this.cfg.maxDiffBytes)
+        : await computeDiff(rec.cwd, this.cfg.maxDiffBytes);
     } catch (e) {
       log.warn(`diff failed for ${rec.taskId}`, String(e));
     }
+    rec.preSnapshot = undefined;
 
     try {
       rec.handle?.cleanup();

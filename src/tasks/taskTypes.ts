@@ -1,5 +1,6 @@
 import type { Isolation } from "../config.js";
 import type { DiffResult } from "../diff/gitDiff.js";
+import type { DirSnapshot } from "../diff/snapshotDiff.js";
 import type { NormalizedEvent, RunHandle, SandboxMode, StartArgs, TaskState } from "../executor/types.js";
 import type { WorktreeInfo } from "../git/worktree.js";
 
@@ -33,6 +34,7 @@ export interface TaskRecord {
   stderrTail: string[]; // bounded ring buffer
   handle?: RunHandle; // absent for queued or loaded-from-disk records
   startArgs?: StartArgs; // in-memory only; retained for queue/retry relaunch
+  preSnapshot?: DirSnapshot; // in-memory only; pre-run file snapshot for non-git diff
   hasOutputSchema: boolean;
   attempt: number;
   maxRetries: number;
