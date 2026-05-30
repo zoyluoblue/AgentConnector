@@ -1,5 +1,6 @@
-import { join } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, Notification } from "electron";
+import { dirname, join } from "node:path";
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from "electron";
+import { getLogFile, setLogFile } from "@engine";
 import { CHANNELS } from "../shared/ipc.js";
 import { EngineService } from "./engineService.js";
 import { fixPath } from "./fixPath.js";
@@ -115,6 +116,11 @@ function registerIpc(): void {
   ipcMain.handle(CHANNELS.runResume, (_e, runId) => engine.runResume(runId));
   ipcMain.handle(CHANNELS.runAbort, (_e, runId) => engine.runAbort(runId));
   ipcMain.handle(CHANNELS.runIntervene, (_e, { runId, instruction }) => engine.runIntervene(runId, instruction));
+  ipcMain.handle(CHANNELS.runDelete, (_e, runId) => engine.runDelete(runId));
+  ipcMain.handle(CHANNELS.openLogs, async () => {
+    const f = getLogFile();
+    if (f) await shell.openPath(dirname(f));
+  });
   ipcMain.handle(CHANNELS.getProject, () => engine.getProject());
   ipcMain.handle(CHANNELS.setProject, (_e, cwd) => engine.setProject(cwd));
   ipcMain.handle(CHANNELS.pickProject, async () => {
@@ -131,6 +137,7 @@ app.whenReady().then(() => {
   if (!process.env.AGENTCONNECTOR_STATE_DIR) {
     process.env.AGENTCONNECTOR_STATE_DIR = join(app.getPath("userData"), "state");
   }
+  setLogFile(join(app.getPath("userData"), "logs", "agentconnector.log"));
   engine = new EngineService();
   registerIpc();
   createWindow();

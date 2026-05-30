@@ -46,6 +46,9 @@ export async function review(phase: PlanPhase, diff: string, opts: ReviewerOptio
   });
   if (!r.ok) return { ok: false, error: r.error ?? "reviewer failed", raw: r.raw };
   const v = coerceVerdict(r.structured);
-  if (!v) return { ok: false, error: "reviewer returned no valid verdict", raw: r.raw };
+  if (!v) {
+    const snippet = (r.text || r.raw || "").slice(0, 600);
+    return { ok: false, error: `reviewer returned no valid verdict. Claude output: ${snippet}`, raw: r.raw };
+  }
   return { ok: true, verdict: v, raw: r.raw };
 }

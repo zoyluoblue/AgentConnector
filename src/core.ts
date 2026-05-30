@@ -15,7 +15,7 @@ export type { ExecutorInfo } from "./executor/registry.js";
 export type { Executor, StartArgs, SandboxMode, TaskState, NormalizedEvent } from "./executor/types.js";
 
 export type { DiffResult, DiffFile } from "./diff/gitDiff.js";
-export { log } from "./util/log.js";
+export { log, setLogFile, getLogFile, setLogLevel } from "./util/log.js";
 
 // Director (planner / reviewer) primitives.
 export { plan } from "./director/planner.js";

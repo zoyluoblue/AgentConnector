@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "../util/log.js";
 import { type Run, isTerminalRun } from "./runTypes.js";
@@ -73,5 +73,15 @@ export class RunStore {
       log.warn("runStore save failed", String(e));
     }
     this.bus.emit("evt", { type: "run", runId: run.runId });
+  }
+
+  delete(runId: string): void {
+    this.runs.delete(runId);
+    try {
+      rmSync(join(this.dir, `${runId}.json`), { force: true });
+    } catch {
+      /* ignore */
+    }
+    this.bus.emit("evt", { type: "run", runId });
   }
 }

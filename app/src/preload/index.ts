@@ -42,6 +42,8 @@ const api: AgentApi = {
     ipcRenderer.on(CHANNELS.evtRun, h);
     return () => ipcRenderer.off(CHANNELS.evtRun, h);
   },
+  runDelete: (runId) => ipcRenderer.invoke(CHANNELS.runDelete, runId),
+  openLogs: () => ipcRenderer.invoke(CHANNELS.openLogs),
 };
 
 contextBridge.exposeInMainWorld("agent", api);

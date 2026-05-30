@@ -137,6 +137,7 @@ export interface ConfigView {
   maxDiffBytes: number;
   stateDir: string;
   logLevel: string;
+  logFile?: string;
 }
 
 export interface RunStartInput {
@@ -180,6 +181,8 @@ export interface AgentApi {
   runAbort(runId: string): Promise<void>;
   runIntervene(runId: string, instruction: string): Promise<void>;
   onRunUpdate(cb: (runId: string) => void): () => void;
+  runDelete(runId: string): Promise<void>;
+  openLogs(): Promise<void>;
 }
 
 export const CHANNELS = {
@@ -211,4 +214,6 @@ export const CHANNELS = {
   runAbort: "run:abort",
   runIntervene: "run:intervene",
   evtRun: "run:update",
+  runDelete: "run:delete",
+  openLogs: "app:openLogs",
 } as const;

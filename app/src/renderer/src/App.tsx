@@ -12,6 +12,7 @@ type Theme = "dark" | "light";
 export default function App() {
   const [runs, setRuns] = useState<Record<string, Run>>({});
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; runId: string } | null>(null);
   const [project, setProject] = useState<ProjectInfo | null>(null);
   const [executors, setExecutors] = useState<ExecutorInfo[]>([]);
   const [defaultExecutor, setDefaultExecutor] = useState("codex");
@@ -75,11 +76,20 @@ export default function App() {
     const p = await agent.pickProject();
     if (p) setProject(p);
   }
+  async function deleteRun(runId: string) {
+    setMenu(null);
+    await agent.runDelete(runId);
+    if (selectedRunId === runId) setSelectedRunId(null);
+    await refreshRuns();
+  }
 
   return (
     <div className="app">
       <div className="header">
         <span className="brand">⬢ AgentConnector</span>
+        <button className="iconbtn" title="新建 Task" onClick={() => setSelectedRunId(null)}>
+          ＋
+        </button>
         <span className="modelabel">Task</span>
         <button className="iconbtn" onClick={() => void pickProject()} title="选择项目目录（可新建文件夹）">
           📁 选择目录
@@ -102,7 +112,12 @@ export default function App() {
       </div>
 
       <div className="tasks">
-        <RunList runs={runList} selectedId={selectedRunId} onSelect={setSelectedRunId} />
+        <RunList
+          runs={runList}
+          selectedId={selectedRunId}
+          onSelect={setSelectedRunId}
+          onContextMenu={(runId, x, y) => setMenu({ x, y, runId })}
+        />
       </div>
 
       <div className="detail">
@@ -130,6 +145,16 @@ export default function App() {
       <StatusBar runs={runList} project={project} defaultExecutor={defaultExecutor} />
 
       {settingsOpen && <Settings config={config} executors={executors} onClose={() => setSettingsOpen(false)} />}
+
+      {menu && (
+        <div className="ctxbackdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
+          <div className="ctxmenu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+            <button className="danger" onClick={() => void deleteRun(menu.runId)}>
+              删除此 Task
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

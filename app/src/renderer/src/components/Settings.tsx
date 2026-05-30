@@ -1,3 +1,4 @@
+import { agent } from "../api";
 import type { ConfigView, ExecutorInfo } from "../types";
 
 function capList(c: ExecutorInfo["capabilities"]): string {
@@ -69,6 +70,16 @@ export function Settings({
             </tbody>
           </table>
         </div>
+
+        {config?.logFile && (
+          <div className="section">
+            <h3>日志</h3>
+            <div className="muted" style={{ wordBreak: "break-all" }}>{config.logFile}</div>
+            <div className="actions">
+              <button onClick={() => void agent.openLogs()}>打开日志目录</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

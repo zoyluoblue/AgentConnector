@@ -157,3 +157,6 @@ label.field { display: block; margin: 8px 0 2px; color: var(--muted); font-size:
 .phasebody h4 { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
 .crit { margin: 4px 0; padding-left: 18px; }
 .crit li { margin: 2px 0; }
+.ctxbackdrop { position: fixed; inset: 0; z-index: 60; }
+.ctxmenu { position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 4px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); min-width: 120px; }
+.ctxmenu button { width: 100%; }

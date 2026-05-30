@@ -22,16 +22,16 @@ export interface Plan {
   phases: PlanPhase[];
 }
 
+// Schema is kept permissive (no additionalProperties:false, minimal required) so
+// the model reliably conforms; coercePlan fills any gaps with defaults.
 export const PLAN_SCHEMA = {
   type: "object",
-  additionalProperties: false,
   properties: {
     summary: { type: "string" },
     phases: {
       type: "array",
       items: {
         type: "object",
-        additionalProperties: false,
         properties: {
           id: { type: "string" },
           title: { type: "string" },
@@ -42,11 +42,11 @@ export const PLAN_SCHEMA = {
           filesLikely: { type: "array", items: { type: "string" } },
           dependsOn: { type: "array", items: { type: "string" } },
         },
-        required: ["id", "title", "goal", "codePlan", "uiPlan", "acceptanceCriteria"],
+        required: ["title", "codePlan", "acceptanceCriteria"],
       },
     },
   },
-  required: ["summary", "phases"],
+  required: ["phases"],
 } as const;
 
 export type Severity = "info" | "minor" | "major" | "critical";
@@ -68,7 +68,6 @@ export interface Verdict {
 
 export const VERDICT_SCHEMA = {
   type: "object",
-  additionalProperties: false,
   properties: {
     pass: { type: "boolean" },
     score: { type: "number" },
@@ -77,19 +76,18 @@ export const VERDICT_SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        additionalProperties: false,
         properties: {
           severity: { type: "string", enum: ["info", "minor", "major", "critical"] },
           file: { type: "string" },
           line: { type: "number" },
           note: { type: "string" },
         },
-        required: ["severity", "note"],
+        required: ["note"],
       },
     },
     requiredChanges: { type: "array", items: { type: "string" } },
   },
-  required: ["pass", "summary", "findings", "requiredChanges"],
+  required: ["pass", "summary"],
 } as const;
 
 // ---- defensive coercion (the model may return slightly-off shapes) ----

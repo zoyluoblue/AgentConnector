@@ -50,6 +50,9 @@ export async function plan(goal: string, opts: PlannerOptions): Promise<PlanResu
   });
   if (!r.ok) return { ok: false, error: r.error ?? "planner failed", raw: r.raw };
   const p = coercePlan(r.structured);
-  if (!p) return { ok: false, error: "planner returned no valid plan", raw: r.raw };
+  if (!p) {
+    const snippet = (r.text || r.raw || "").slice(0, 600);
+    return { ok: false, error: `planner returned no valid plan. Claude output: ${snippet}`, raw: r.raw };
+  }
   return { ok: true, plan: p, raw: r.raw };
 }

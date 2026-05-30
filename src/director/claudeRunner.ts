@@ -32,6 +32,24 @@ function tryParse(s: string): unknown {
   }
 }
 
+/** Pull a JSON value from a string that may be wrapped in markdown fences or prose. */
+function extractJson(s: string): unknown {
+  const direct = tryParse(s.trim());
+  if (direct !== undefined) return direct;
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence && fence[1]) {
+    const f = tryParse(fence[1].trim());
+    if (f !== undefined) return f;
+  }
+  const i = s.indexOf("{");
+  const j = s.lastIndexOf("}");
+  if (i >= 0 && j > i) {
+    const b = tryParse(s.slice(i, j + 1));
+    if (b !== undefined) return b;
+  }
+  return undefined;
+}
+
 /** Parse the `claude -p --output-format json` envelope. Pure + defensive (unit-tested). */
 export function parseClaudeEnvelope(out: string, err: string, code: number | null): ClaudeRunResult {
   const trimmed = out.trim();
@@ -59,7 +77,7 @@ export function parseClaudeEnvelope(out: string, err: string, code: number | nul
   if (resultField !== undefined && resultField !== null) {
     if (typeof resultField === "object") structured = resultField;
     else if (typeof resultField === "string") {
-      const s = tryParse(resultField);
+      const s = extractJson(resultField);
       if (s !== undefined) structured = s;
     }
   }

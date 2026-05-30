@@ -67,6 +67,7 @@ export class Orchestrator {
       updatedAt: now,
     };
     this.deps.runStore.create(run);
+    log.info("run started", { runId: run.runId, goal: input.goal.slice(0, 140), gate: run.options.gateMode });
     this.drive(run.runId);
     return run;
   }
@@ -143,6 +144,19 @@ export class Orchestrator {
     this.deps.runStore.save(run);
   }
 
+  async deleteRun(runId: string): Promise<void> {
+    const run = this.deps.runStore.get(runId);
+    if (run && !isTerminalRun(run.status)) {
+      try {
+        await this.abort(runId);
+      } catch {
+        /* ignore */
+      }
+    }
+    this.deps.runStore.delete(runId);
+    log.info("run deleted", { runId });
+  }
+
   // ---- driver ----
   private drive(runId: string): void {
     if (this.driving.has(runId)) return;
@@ -175,6 +189,7 @@ export class Orchestrator {
         run.status = "failed";
         run.planError = pr.error;
         run.error = pr.error;
+        log.warn("plan failed", { runId, error: pr.error });
         store.save(run);
         return;
       }
@@ -182,6 +197,8 @@ export class Orchestrator {
       run.planRaw = pr.raw;
       run.phases = pr.plan.phases.map(newPhaseRun);
       store.save(run);
+      log.info("plan ready", { runId, phases: run.phases.length });
+      log.debug("plan raw", (pr.raw ?? "").slice(0, 4000));
       if (run.options.gateMode === "manual_plan" || run.options.gateMode === "manual_both") {
         run.status = "awaiting_plan_approval";
         store.save(run);
@@ -197,6 +214,7 @@ export class Orchestrator {
         run.status = "done";
         run.finishedAt = Date.now();
         store.save(run);
+        log.info("run done", { runId, phases: run.phases.length });
         return;
       }
       run.status = "running";
@@ -234,6 +252,7 @@ export class Orchestrator {
       const isRevise = pr.iteration > 0;
       pr.status = isRevise ? "revising" : "executing";
       store.save(run);
+      log.info(isRevise ? "phase revise" : "phase execute", { runId, phase: idx, title: pr.phase.title, iteration: pr.iteration });
 
       let executor: Executor;
       try {
@@ -300,6 +319,8 @@ export class Orchestrator {
       pr.lastVerdict = rv.verdict;
       pr.verdicts.push(rv.verdict);
       store.save(run);
+      log.info("phase verdict", { runId, phase: idx, pass: rv.verdict.pass, score: rv.verdict.score });
+      log.debug("review raw", (rv.raw ?? "").slice(0, 4000));
 
       if (rv.verdict.pass) {
         pr.status = "passed";

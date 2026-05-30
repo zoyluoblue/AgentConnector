@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { Orchestrator, RunStore, TaskStore, ensureBuiltins, executorsInfo, getExecutor, loadConfig, plan, review, toTaskView } from "@engine";
+import { Orchestrator, RunStore, TaskStore, ensureBuiltins, executorsInfo, getExecutor, getLogFile, loadConfig, plan, review, toTaskView } from "@engine";
 import type { Plan, Run, RunEvent, StartArgs, StoreEvent } from "@engine";
 import type {
   ApplyResult,
@@ -114,6 +114,9 @@ export class EngineService {
   runIntervene(runId: string, instruction: string): void {
     this.orch.intervene(runId, instruction);
   }
+  runDelete(runId: string): Promise<void> {
+    return this.orch.deleteRun(runId);
+  }
 
   async start(input: StartInput): Promise<StartResult> {
     try {
@@ -177,6 +180,7 @@ export class EngineService {
       maxDiffBytes: this.cfg.maxDiffBytes,
       stateDir: this.cfg.stateDir,
       logLevel: this.cfg.logLevel,
+      logFile: getLogFile(),
     };
   }
 
