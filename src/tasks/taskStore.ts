@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import type { Config, Isolation } from "../config.js";
 import { computeDiff } from "../diff/gitDiff.js";
 import type { Executor, NormalizedEvent, RunExit, StartArgs } from "../executor/types.js";
@@ -21,6 +22,11 @@ interface QueueEntry {
   isolation: Isolation;
 }
 
+/** Live events a frontend (e.g. the GUI) can subscribe to via TaskStore.on(). */
+export type StoreEvent =
+  | { type: "update"; taskId: string }
+  | { type: "activity"; taskId: string; event: NormalizedEvent };
+
 /**
  * Owns all task records in an in-memory Map (persists across tool calls within a
  * session) and mirrors snapshots to disk for crash recovery / cross-session resume.
@@ -30,6 +36,7 @@ export class TaskStore {
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly queue: QueueEntry[] = [];
   private readonly persistence: Persistence;
+  private readonly bus = new EventEmitter();
 
   constructor(private readonly cfg: Config) {
     this.persistence = new Persistence(cfg.stateDir);
@@ -104,6 +111,23 @@ export class TaskStore {
     return { total: this.tasks.size, queued: this.queue.length, byState };
   }
 
+  /** Subscribe to live store events (task updates + activity). Returns an unsubscribe fn. */
+  on(cb: (e: StoreEvent) => void): () => void {
+    this.bus.on("evt", cb);
+    return () => this.bus.off("evt", cb);
+  }
+
+  private emit(e: StoreEvent): void {
+    this.bus.emit("evt", e);
+  }
+
+  /** Persist a snapshot and notify subscribers of an update. */
+  private touch(rec: TaskRecord): void {
+    const snap = snapshot(rec);
+    this.persistence.save(snap);
+    this.emit({ type: "update", taskId: rec.taskId });
+  }
+
   /** Create a task; launch now, or queue if at the concurrency cap. Returns immediately. */
   async start(executor: Executor, args: StartArgs, opts: LaunchOptions = {}): Promise<TaskRecord> {
     const isolation: Isolation = opts.isolation ?? this.cfg.defaultIsolation;
@@ -130,7 +154,7 @@ export class TaskStore {
     this.tasks.set(rec.taskId, rec);
 
     if (this.runningCount() >= this.cfg.maxConcurrent) {
-      this.persistence.save(snapshot(rec));
+      this.touch(rec);
       this.queue.push({ rec, executor, args, isolation });
       log.info(`task ${rec.taskId} queued (${this.queue.length} waiting)`);
       return rec;
@@ -163,7 +187,7 @@ export class TaskStore {
     const handle = executor.start({ ...args, cwd });
     rec.handle = handle;
     rec.pid = handle.pid;
-    this.persistence.save(snapshot(rec));
+    this.touch(rec);
     log.info(`task ${rec.taskId} started`, { executor: rec.executor, isolation, attempt: rec.attempt, pid: rec.pid });
 
     handle.onEvent((e) => this.onEvent(rec, e));
@@ -178,6 +202,8 @@ export class TaskStore {
     rec.lastEventKind = e.kind;
     if (e.sessionId && !rec.sessionId) rec.sessionId = e.sessionId;
     pushBounded(rec.events, e, this.cfg.maxEvents);
+    this.emit({ type: "activity", taskId: rec.taskId, event: e });
+    this.emit({ type: "update", taskId: rec.taskId });
   }
 
   private async onDone(entry: QueueEntry, exit: RunExit): Promise<void> {
@@ -240,7 +266,7 @@ export class TaskStore {
       /* ignore */
     }
 
-    this.persistence.save(snapshot(rec));
+    this.touch(rec);
     this.dequeueNext();
   }
 
@@ -259,7 +285,7 @@ export class TaskStore {
       rec.canceledByUs = true;
       rec.state = "canceled";
       rec.finishedAt = Date.now();
-      this.persistence.save(snapshot(rec));
+      this.touch(rec);
       return;
     }
     if (rec.state !== "running" || !rec.handle) return;
@@ -280,7 +306,7 @@ export class TaskStore {
     const res = await applyWorktree(rec.worktree);
     if (res.applied) {
       rec.appliedAt = Date.now();
-      this.persistence.save(snapshot(rec));
+      this.touch(rec);
       try {
         await removeWorktree(rec.worktree);
       } catch {
