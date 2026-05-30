@@ -6,6 +6,8 @@ export interface ClaudeRunOptions {
   cwd: string;
   /** JSON Schema object -> passed inline to `--json-schema` for structured output. */
   schema?: unknown;
+  /** Appended to the system prompt (e.g. to force JSON-only output). */
+  systemPrompt?: string;
   model?: string;
   /** Disallow edit tools (default true) so plan/review can't mutate the repo. */
   readOnly?: boolean;
@@ -101,6 +103,7 @@ export async function runClaude(opts: ClaudeRunOptions): Promise<ClaudeRunResult
   // --json-schema takes the schema INLINE (a JSON string), not a file path.
   // The variadic --disallowedTools goes LAST so it only consumes the tool names.
   const argv = ["-p", opts.prompt, "--output-format", "json"];
+  if (opts.systemPrompt) argv.push("--append-system-prompt", opts.systemPrompt);
   if (opts.schema !== undefined) argv.push("--json-schema", JSON.stringify(opts.schema));
   if (opts.model) argv.push("--model", opts.model);
   argv.push("--add-dir", opts.cwd);

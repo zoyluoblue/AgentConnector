@@ -87,16 +87,12 @@ export default function App() {
     <div className="app">
       <div className="header">
         <span className="brand">⬢ AgentConnector</span>
-        <button className="iconbtn" title="新建 Task" onClick={() => setSelectedRunId(null)}>
-          ＋
-        </button>
-        <span className="modelabel">Task</span>
-        <button className="iconbtn" onClick={() => void pickProject()} title="选择项目目录（可新建文件夹）">
-          📁 选择目录
+        <button className="iconbtn" title="选择目录（可新建文件夹）" onClick={() => void pickProject()}>
+          ＋ 选择目录
         </button>
         <span
           className="muted"
-          style={{ fontSize: 12, maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          style={{ fontSize: 12, maxWidth: 480, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
           {project
             ? `${shortPath(project.cwd)}${project.isRepo ? ` (${project.branch ?? "detached"}${project.dirty ? ` ✎${project.dirty}` : ""})` : " · 非git"}`
