@@ -357,11 +357,21 @@ button {
   border-top: 1px solid var(--line);
   background: var(--panel);
   display: flex;
+  align-items: center;
 }
-.btn.exec {
-  background: var(--codex);
+.execute-bar .btn {
   width: 100%;
   padding: 9px 16px;
+}
+.collab-foot-text {
+  flex: 1;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.bubble-n {
+  opacity: 0.55;
+  font-weight: 400;
 }
 .collab-foot {
   padding: 11px 12px;

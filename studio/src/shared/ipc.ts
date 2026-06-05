@@ -7,6 +7,8 @@ export type Mode = "solo" | "collab";
 
 export interface ChatMessage {
   id: string;
+  /** stable sequence number for referencing turns ("上一句是 #3") */
+  n: number;
   role: Role;
   kind: MsgKind;
   text: string;

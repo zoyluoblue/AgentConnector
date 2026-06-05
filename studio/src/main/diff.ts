@@ -1,23 +1,77 @@
-import { spawn } from "node:child_process";
-import { resolveBin } from "./which.js";
+import { type Dirent, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 
-function git(args: string[], cwd: string): Promise<string> {
-  return new Promise((resolve) => {
-    const bin = resolveBin("git");
-    if (!bin) return resolve("");
-    const c = spawn(bin, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    c.stdout.on("data", (d) => (out += d.toString()));
-    c.on("error", () => resolve(""));
-    c.on("close", () => resolve(out));
-  });
+const SKIP = new Set(["node_modules", "out", "release", "dist", ".next", ".cache"]);
+
+function walk(dir: string, base: string, acc: Map<string, string>, depth: number): void {
+  if (depth > 8) return;
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (SKIP.has(e.name)) continue;
+    if (e.isDirectory() && e.name.startsWith(".")) continue; // skip .git, .next, ...
+    const full = join(dir, e.name);
+    if (e.isDirectory()) {
+      walk(full, base, acc, depth + 1);
+    } else if (e.isFile()) {
+      try {
+        const s = statSync(full);
+        if (s.size > 2_000_000) continue; // skip very large files
+        acc.set(relative(base, full), `${s.mtimeMs}:${s.size}`);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 }
 
-/** Best-effort working-tree diff (tracked changes + names of new files) for Claude to review. */
-export async function gitDiff(cwd: string): Promise<string> {
-  const diff = (await git(["diff"], cwd)).trim();
-  const untracked = (await git(["ls-files", "--others", "--exclude-standard"], cwd)).trim();
-  let r = diff;
-  if (untracked) r += `${r ? "\n\n" : ""}[新增文件]\n${untracked}`;
-  return r || "（未检测到文件改动）";
+export type Snapshot = Map<string, string>;
+
+/** Snapshot a project's files (path -> mtime:size). Works for any folder, git or not. */
+export function snapshot(cwd: string): Snapshot {
+  const m = new Map<string, string>();
+  walk(cwd, cwd, m, 0);
+  return m;
+}
+
+/**
+ * Compare a prior snapshot to the current tree and produce a review-friendly summary
+ * that INCLUDES the content of new/changed files — Claude reviews with tools disabled,
+ * so it can only see what we put in the prompt (a plain `git diff` missed new files / non-git dirs).
+ */
+export function changesSince(before: Snapshot, cwd: string): string {
+  const after = snapshot(cwd);
+  const added: string[] = [];
+  const modified: string[] = [];
+  const deleted: string[] = [];
+  for (const [p, sig] of after) {
+    if (!before.has(p)) added.push(p);
+    else if (before.get(p) !== sig) modified.push(p);
+  }
+  for (const [p] of before) if (!after.has(p)) deleted.push(p);
+
+  if (!added.length && !modified.length && !deleted.length) return "（未检测到文件改动）";
+
+  const parts: string[] = [`改动概览：新增 ${added.length}，修改 ${modified.length}，删除 ${deleted.length}`];
+  if (deleted.length) parts.push(`删除：${deleted.join(", ")}`);
+
+  const show = [
+    ...added.map((p) => ["新增", p] as const),
+    ...modified.map((p) => ["修改", p] as const),
+  ];
+  for (const [status, p] of show.slice(0, 25)) {
+    parts.push(`\n### ${status}: ${p}`);
+    try {
+      const content = readFileSync(join(cwd, p), "utf8");
+      parts.push(`\`\`\`\n${content.slice(0, 4000)}${content.length > 4000 ? "\n…(已截断)" : ""}\n\`\`\``);
+    } catch {
+      parts.push("（无法读取内容）");
+    }
+  }
+  if (show.length > 25) parts.push(`…还有 ${show.length - 25} 个文件未展示`);
+  return parts.join("\n");
 }

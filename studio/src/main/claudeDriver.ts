@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { log } from "./log.js";
 import { resolveBin } from "./which.js";
 
 export interface ClaudeAsk {
@@ -107,6 +108,7 @@ function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
       resolve(r);
     };
 
+    log("claude.exec", { model: ask.model || "default", resume: !!ask.sessionId, cwd: ask.cwd });
     const child = spawn(bin, argv, { cwd: ask.cwd, stdio: ["ignore", "pipe", "pipe"], env: process.env });
     ask.signal?.addEventListener("abort", () => {
       try {

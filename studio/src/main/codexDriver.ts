@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { log } from "./log.js";
 import { resolveBin } from "./which.js";
 
 export type Sandbox = "read-only" | "workspace-write" | "danger-full-access";
@@ -54,8 +55,10 @@ export function askCodex(ask: CodexAsk): Promise<CodexResult> {
       resolve(r);
     };
 
+    const args = buildArgs(ask);
+    log("codex.exec", { argv: args.slice(0, -1), promptLen: ask.prompt.length, cwd: ask.cwd });
     // stdin MUST be ignored: codex reads piped stdin as input and hangs waiting for EOF otherwise.
-    const child: ChildProcess = spawn(bin, buildArgs(ask), { cwd: ask.cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    const child: ChildProcess = spawn(bin, args, { cwd: ask.cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
 
     const onEvent = (ev: Record<string, unknown>) => {
       const type = ev.type as string | undefined;

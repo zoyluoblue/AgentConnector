@@ -43,7 +43,9 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Pro
       {messages.map((m) => (
         <div key={m.id} className={`row ${m.role}`}>
           <div className={`bubble ${m.role} ${m.kind}`}>
-            <div className="bubble-role">{ROLE_LABEL[m.role]}</div>
+            <div className="bubble-role">
+            <span className="bubble-n">#{m.n}</span> {ROLE_LABEL[m.role]}
+          </div>
             <div className="bubble-text">{m.text || (m.pending ? <span className="dots">思考中</span> : "")}</div>
           </div>
         </div>

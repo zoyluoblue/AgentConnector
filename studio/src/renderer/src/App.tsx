@@ -10,15 +10,20 @@ const DISCONNECTED: AuthState = { claude: { connected: false }, codex: { connect
 
 const CLAUDE_MODELS = [
   { v: "", label: "默认" },
-  { v: "opus", label: "Opus" },
-  { v: "sonnet", label: "Sonnet" },
-  { v: "haiku", label: "Haiku" },
+  { v: "claude-opus-4-8", label: "Opus 4.8" },
+  { v: "claude-opus-4-8[1m]", label: "Opus 4.8 (1M)" },
+  { v: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { v: "claude-haiku-4-5", label: "Haiku 4.5" },
+  { v: "claude-opus-4-7", label: "Opus 4.7 (旧)" },
+  { v: "claude-opus-4-7[1m]", label: "Opus 4.7 (1M, 旧)" },
+  { v: "claude-opus-4-6", label: "Opus 4.6 (旧)" },
 ];
 const CODEX_MODELS = [
   { v: "", label: "默认" },
-  { v: "gpt-5.5", label: "gpt-5.5" },
-  { v: "gpt-5", label: "gpt-5" },
-  { v: "o3", label: "o3" },
+  { v: "gpt-5.5", label: "GPT-5.5" },
+  { v: "gpt-5.4", label: "GPT-5.4" },
+  { v: "gpt-5.4-mini", label: "GPT-5.4-Mini" },
+  { v: "gpt-5.3-codex-spark", label: "GPT-5.3-Codex-Spark" },
 ];
 
 export function App() {
@@ -62,6 +67,7 @@ export function App() {
   const claudeMsgs = useMemo(() => messages.filter((m) => m.lane === "claude"), [messages]);
   const codexMsgs = useMemo(() => messages.filter((m) => m.lane === "codex"), [messages]);
   const collab = mode === "collab";
+  const anyBusy = busy.claude || busy.codex;
 
   const connect = async (kind: AgentKind) => {
     setConnecting((c) => ({ ...c, [kind]: true }));
@@ -96,7 +102,7 @@ export function App() {
     <div className="app">
       <ProjectBar
         project={project}
-        busy={busy.claude || busy.codex}
+        busy={anyBusy}
         mode={mode}
         onPick={() => void window.studio.pickProject()}
         onMode={changeMode}
@@ -135,7 +141,7 @@ export function App() {
             }
           />
           <Composer
-            busy={busy.claude}
+            busy={collab ? anyBusy : busy.claude}
             disabled={leftDisabled}
             placeholder={leftPlaceholder}
             onSend={(t) => void window.studio.send(t, "claude")}
@@ -168,6 +174,7 @@ export function App() {
             mode={mode}
             messages={codexMsgs}
             busy={busy.codex}
+            orchestrating={collab && anyBusy}
             hasProject={!!project.cwd}
             codexConnected={auth.codex.connected}
             onSend={(t) => void window.studio.send(t, "codex")}

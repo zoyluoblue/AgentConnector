@@ -10,12 +10,15 @@ interface Props {
 
 export function Composer({ busy, disabled, placeholder, onSend, onStop }: Props) {
   const [text, setText] = useState("");
+  const [composing, setComposing] = useState(false);
+
   const submit = () => {
     const t = text.trim();
     if (!t || disabled || busy) return;
     onSend(t);
     setText("");
   };
+
   return (
     <div className="composer">
       <textarea
@@ -24,8 +27,12 @@ export function Composer({ busy, disabled, placeholder, onSend, onStop }: Props)
         disabled={disabled}
         placeholder={placeholder}
         onChange={(e) => setText(e.target.value)}
+        onCompositionStart={() => setComposing(true)}
+        onCompositionEnd={() => setComposing(false)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
+          // Don't submit while an IME composition is active (Chinese input + Enter to
+          // confirm a candidate would otherwise send early and leave trailing text).
+          if (e.key === "Enter" && !e.shiftKey && !composing && !e.nativeEvent.isComposing) {
             e.preventDefault();
             submit();
           }
