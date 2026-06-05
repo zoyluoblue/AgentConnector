@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AgentKind, AuthState, BusyState, ChatMessage, Mode, ProjectInfo } from "../../shared/ipc";
-import { AgentChip } from "./components/AgentChip";
+import { AgentHeader } from "./components/AgentHeader";
 import { Composer } from "./components/Composer";
 import { Conversation } from "./components/Conversation";
-import { ProjectBar } from "./components/ProjectBar";
 import { RightPanel } from "./components/RightPanel";
+import { TopBar } from "./components/TopBar";
 
 const DISCONNECTED: AuthState = { claude: { connected: false }, codex: { connected: false } };
 
@@ -48,7 +48,7 @@ export function App() {
     const offBusy = window.studio.onBusy(setBusy);
     const offProject = window.studio.onProject((p) => {
       setProject(p);
-      setMessages([]); // project change starts fresh conversations
+      setMessages([]);
     });
     const offAuth = window.studio.onAuth(setAuth);
     const offMode = window.studio.onMode(setMode);
@@ -95,49 +95,33 @@ export function App() {
       : collab && !auth.codex.connected
         ? "请先连接 Codex…"
         : collab
-          ? "描述你想做的，回车后 Claude 与 Codex 自动协作完成…"
-          : "随时输入…（Enter 发送，Shift+Enter 换行）";
+          ? "描述你想做的，回车后 Claude 与 Codex 自动协作…"
+          : "和 Claude 聊聊你想做什么…（Enter 发送）";
 
   return (
     <div className="app">
-      <ProjectBar
-        project={project}
-        busy={anyBusy}
-        mode={mode}
-        onPick={() => void window.studio.pickProject()}
-        onMode={changeMode}
-      />
+      <TopBar project={project} mode={mode} busy={anyBusy} onPick={() => void window.studio.pickProject()} onMode={changeMode} />
       <div className="split">
-        <section className="left">
-          <div className="col-head">
-            <AgentChip
-              label="Claude · 规划/审查"
-              accent="#d97757"
-              status={auth.claude}
-              connecting={connecting.claude}
-              onConnect={() => void connect("claude")}
-            />
-            <select
-              className="model-select"
-              value={models.claude}
-              onChange={(e) => changeModel("claude", e.target.value)}
-              title="Claude 模型"
-            >
-              {CLAUDE_MODELS.map((m) => (
-                <option key={m.v} value={m.v}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        <section className="panel left">
+          <AgentHeader
+            kind="claude"
+            name="Claude"
+            role="规划 · 审查"
+            status={auth.claude}
+            connecting={connecting.claude}
+            onConnect={() => void connect("claude")}
+            models={CLAUDE_MODELS}
+            model={models.claude}
+            onModel={(v) => changeModel("claude", v)}
+          />
           <Conversation
             messages={claudeMsgs}
             hasProject={!!project.cwd}
             emptyTitle={collab ? "描述你想做的东西" : "说说你想做什么"}
             emptySub={
               collab
-                ? "回车后 Claude 规划 → Codex 自动执行 → Claude 审查，全程自动，无需手动操作。"
-                : "Claude 会先帮你规划。切到「双向」可让 Claude 和 Codex 自动协作完成。"
+                ? "回车后 Claude 规划 → Codex 自动执行 → Claude 审查，全程自动。"
+                : "Claude 先帮你规划。切到「双向」可让 Claude 和 Codex 自动协作完成。"
             }
           />
           <Composer
@@ -148,28 +132,18 @@ export function App() {
             onStop={() => window.studio.abort("claude")}
           />
         </section>
-        <section className="right">
-          <div className="col-head">
-            <AgentChip
-              label="Codex · 写码"
-              accent="#10a37f"
-              status={auth.codex}
-              connecting={connecting.codex}
-              onConnect={() => void connect("codex")}
-            />
-            <select
-              className="model-select"
-              value={models.codex}
-              onChange={(e) => changeModel("codex", e.target.value)}
-              title="Codex 模型"
-            >
-              {CODEX_MODELS.map((m) => (
-                <option key={m.v} value={m.v}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        <section className="panel right">
+          <AgentHeader
+            kind="codex"
+            name="Codex"
+            role="写码 · 执行"
+            status={auth.codex}
+            connecting={connecting.codex}
+            onConnect={() => void connect("codex")}
+            models={CODEX_MODELS}
+            model={models.codex}
+            onModel={(v) => changeModel("codex", v)}
+          />
           <RightPanel
             mode={mode}
             messages={codexMsgs}

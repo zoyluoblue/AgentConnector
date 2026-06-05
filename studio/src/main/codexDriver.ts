@@ -37,8 +37,23 @@ function buildArgs(ask: CodexAsk): string[] {
   return a;
 }
 
+// Dev stub (STUDIO_FAKE=1): canned result so the UI/orchestration can be exercised fast.
+function fakeCodex(ask: CodexAsk): Promise<CodexResult> {
+  return new Promise((resolve) => {
+    const t = setTimeout(
+      () => resolve({ ok: true, text: "已按计划创建 index.html / styles.css / app.js，实现了添加、勾选完成与本地保存。", threadId: "fake", steps: 3 }),
+      1000,
+    );
+    ask.signal?.addEventListener("abort", () => {
+      clearTimeout(t);
+      resolve({ ok: false, text: "", error: "已停止" });
+    });
+  });
+}
+
 /** Run `codex exec` (or resume) and stream its agent messages. Codex actually edits files. */
 export function askCodex(ask: CodexAsk): Promise<CodexResult> {
+  if (process.env.STUDIO_FAKE) return fakeCodex(ask);
   return new Promise((resolve) => {
     const bin = resolveBin("codex");
     if (!bin) return resolve({ ok: false, text: "", error: "codex 未找到（PATH）" });

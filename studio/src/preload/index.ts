@@ -21,6 +21,12 @@ const api: StudioApi = {
     return () => ipcRenderer.off(CH.modeEvent, h);
   },
   setModel: (agent, model) => ipcRenderer.send(CH.modelSet, { agent, model }),
+  getPreview: () => ipcRenderer.invoke(CH.previewGet),
+  onPreviewRefresh: (cb) => {
+    const h = (_e: IpcRendererEvent, u: string | null) => cb(u);
+    ipcRenderer.on(CH.previewRefresh, h);
+    return () => ipcRenderer.off(CH.previewRefresh, h);
+  },
   onEvent: (cb) => {
     const h = (_e: IpcRendererEvent, m: ChatMessage) => cb(m);
     ipcRenderer.on(CH.event, h);

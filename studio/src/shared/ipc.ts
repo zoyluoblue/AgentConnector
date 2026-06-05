@@ -55,6 +55,8 @@ export const CH = {
   modeSet: "mode:set",
   modeEvent: "mode:event",
   modelSet: "model:set",
+  previewGet: "preview:get",
+  previewRefresh: "preview:refresh",
 } as const;
 
 /** The surface exposed to the renderer as `window.studio`. */
@@ -67,6 +69,9 @@ export interface StudioApi {
   onMode(cb: (m: Mode) => void): () => void;
   /** Set the model an agent should use ("" = the CLI default). */
   setModel(agent: AgentKind, model: string): void;
+  /** Live preview: URL of the project's HTML entry, if any. */
+  getPreview(): Promise<{ url: string | null }>;
+  onPreviewRefresh(cb: (url: string | null) => void): () => void;
   /** A new or updated message (upsert by id). */
   onEvent(cb: (m: ChatMessage) => void): () => void;
   onBusy(cb: (b: BusyState) => void): () => void;

@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
@@ -35,6 +35,16 @@ let cancelOrchestration = false;
 const busy: BusyState = { claude: false, codex: false };
 const aborts: Record<AgentKind, AbortController | null> = { claude: null, codex: null };
 const agentModel: Record<AgentKind, string> = { claude: "", codex: "" };
+const intervene: Record<AgentKind, string> = { claude: "", codex: "" };
+
+/** Prepend any pending user interjection for a lane to the prompt, then clear it. */
+function withIntervene(prompt: string, lane: AgentKind): string {
+  if (!intervene[lane]) return prompt;
+  const extra = intervene[lane];
+  intervene[lane] = "";
+  log("intervene.consumed", { lane });
+  return `（用户临时补充指令，请务必优先考虑）：${extra}\n\n${prompt}`;
+}
 
 const PLANNER_SYSTEM =
   "你是 AgentConnector 的规划助手，面向不懂编程的用户。用简洁、友好的中文交流，避免专业黑话。" +
@@ -90,6 +100,15 @@ function post(role: Role, kind: MsgKind, text: string, pending: boolean, id: str
 
 function projInfo(): ProjectInfo {
   return { cwd: projectCwd, name: projectCwd ? basename(projectCwd) : null };
+}
+/** Find a built HTML entry to show in the live preview, if any. */
+function previewUrl(): string | null {
+  if (!projectCwd) return null;
+  for (const f of ["index.html", "public/index.html", "dist/index.html", "build/index.html", "src/index.html"]) {
+    const p = join(projectCwd, f);
+    if (existsSync(p)) return `file://${p}`;
+  }
+  return null;
 }
 function setProject(p: string): void {
   let resolved = p;
@@ -147,6 +166,7 @@ async function codexTurn(prompt: string) {
   post(res.ok ? "codex" : "system", res.ok ? "text" : "error", res.ok ? res.text + suffix : (res.error ?? "出错了"), false, pid, "codex");
   setBusy("codex", false);
   aborts.codex = null;
+  send(CH.previewRefresh, previewUrl()); // codex may have changed files -> refresh the live preview
   return res;
 }
 
@@ -164,19 +184,19 @@ async function runOrchestration(goal: string): Promise<void> {
   log("orchestration.start", { goal: goal.slice(0, 120) });
   post("user", "text", goal, false, undefined, "claude");
 
-  const plan = await claudeTurn(planPrompt(goal), PLANNER_SYSTEM);
+  const plan = await claudeTurn(withIntervene(planPrompt(goal), "claude"), PLANNER_SYSTEM);
   if (orchStopped()) return;
   if (!plan.ok) return;
 
   const before = snapshot(projectCwd as string);
-  const exec = await codexTurn(executePrompt(plan.text));
+  const exec = await codexTurn(withIntervene(executePrompt(plan.text), "codex"));
   if (orchStopped()) return;
   if (!exec.ok) return;
 
   for (let iter = 0; iter < MAX_REVISE; iter++) {
     const diff = changesSince(before, projectCwd as string);
     log("orchestration.review", { iter, diffLen: diff.length });
-    const review = await claudeTurn(reviewPrompt(goal, diff), REVIEWER_SYSTEM);
+    const review = await claudeTurn(withIntervene(reviewPrompt(goal, diff), "claude"), REVIEWER_SYSTEM);
     if (orchStopped()) return;
     if (!review.ok) return;
     if (verdictPass(review.text)) {
@@ -189,7 +209,7 @@ async function runOrchestration(goal: string): Promise<void> {
       log("orchestration.exhausted");
       return;
     }
-    const revise = await codexTurn(revisePrompt(review.text));
+    const revise = await codexTurn(withIntervene(revisePrompt(review.text), "codex"));
     if (orchStopped()) return;
     if (!revise.ok) return;
   }
@@ -200,15 +220,34 @@ async function handleSend(text: string, target: AgentKind): Promise<void> {
     post("system", "error", "请先选择一个项目文件夹。", false, undefined, target);
     return;
   }
+
+  // 随时插话: if something is already running, inject this message instead of starting fresh.
+  const running = mode === "collab" ? busy.claude || busy.codex : busy[target];
+  if (running) {
+    const lane: AgentKind = mode === "collab" ? "claude" : target;
+    log("interject", { target, mode, len: text.length });
+    post("user", "text", text, false, undefined, lane);
+    if (mode === "collab") {
+      intervene.claude += (intervene.claude ? "\n" : "") + text;
+      intervene.codex += (intervene.codex ? "\n" : "") + text;
+    } else {
+      intervene[target] += (intervene[target] ? "\n" : "") + text;
+    }
+    return;
+  }
+
   log("send", { target, mode, len: text.length });
   if (mode === "collab") {
     await runOrchestration(text);
-  } else if (target === "claude") {
-    post("user", "text", text, false, undefined, "claude");
-    await claudeTurn(text, PLANNER_SYSTEM);
   } else {
-    post("user", "text", text, false, undefined, "codex");
-    await codexTurn(text);
+    post("user", "text", text, false, undefined, target);
+    let next: string | null = text;
+    while (next) {
+      const res = target === "claude" ? await claudeTurn(next, PLANNER_SYSTEM) : await codexTurn(next);
+      if (!res.ok) break;
+      next = intervene[target] || null; // a follow-up that was interjected mid-turn
+      intervene[target] = "";
+    }
   }
 }
 
@@ -256,7 +295,7 @@ function createWindow(): void {
     minHeight: 640,
     title: "AgentConnector",
     backgroundColor: "#0e0f13",
-    webPreferences: { preload: join(__dirname, "../preload/index.js"), contextIsolation: true, sandbox: false },
+    webPreferences: { preload: join(__dirname, "../preload/index.js"), contextIsolation: true, sandbox: false, webviewTag: true },
   });
 
   if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -281,7 +320,7 @@ function createWindow(): void {
       void handleSend(demo, "claude").then(async () => {
         const cd = process.env.STUDIO_DEMO_CODEX;
         if (cd && mode === "solo") await handleSend(cd, "codex");
-        if (shotPath) setTimeout(() => capture(shotPath), 1500);
+        if (shotPath) setTimeout(() => capture(shotPath), 3500);
       });
     } else if (shotPath) {
       setTimeout(() => capture(shotPath), Number(process.env.STUDIO_SHOT_DELAY ?? 8000));
@@ -322,6 +361,8 @@ app.whenReady().then(() => {
     if (!r.canceled && r.filePaths[0]) setProject(r.filePaths[0]);
     return projInfo();
   });
+
+  ipcMain.handle(CH.previewGet, () => ({ url: previewUrl() }));
 
   ipcMain.handle(CH.authGet, () => sessionAuth);
   ipcMain.handle(CH.authConnect, async (_e, kind: AgentKind) => {

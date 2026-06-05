@@ -1,7 +1,22 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage, Role } from "../../../shared/ipc";
 
-const ROLE_LABEL: Record<Role, string> = { user: "你", claude: "Claude", codex: "Codex", system: "系统" };
+const META: Record<Role, { label: string; mono: string }> = {
+  user: { label: "你", mono: "你" },
+  claude: { label: "Claude", mono: "✦" },
+  codex: { label: "Codex", mono: "{ }" },
+  system: { label: "系统", mono: "·" },
+};
+
+function Thinking() {
+  return (
+    <span className="thinking">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
 
 interface Props {
   messages: ChatMessage[];
@@ -22,7 +37,7 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Pro
         <div className="empty">
           <div className="empty-emoji">📂</div>
           <div className="empty-title">先选一个项目文件夹</div>
-          <div className="empty-sub">点左上角「选择项目…」。选好后即可开始。</div>
+          <div className="empty-sub">点顶部「选择项目」。选好后即可开始。</div>
         </div>
       </div>
     );
@@ -31,7 +46,7 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Pro
     return (
       <div className="conversation empty-wrap">
         <div className="empty">
-          <div className="empty-emoji">💬</div>
+          <div className="empty-emoji">✨</div>
           <div className="empty-title">{emptyTitle}</div>
           <div className="empty-sub">{emptySub}</div>
         </div>
@@ -40,16 +55,30 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Pro
   }
   return (
     <div className="conversation">
-      {messages.map((m) => (
-        <div key={m.id} className={`row ${m.role}`}>
-          <div className={`bubble ${m.role} ${m.kind}`}>
-            <div className="bubble-role">
-            <span className="bubble-n">#{m.n}</span> {ROLE_LABEL[m.role]}
+      {messages.map((m) => {
+        if (m.role === "system") {
+          return (
+            <div key={m.id} className={`msg msg-system ${m.kind === "error" ? "is-error" : ""}`}>
+              <div className="msg-body">
+                <div className="msg-text">{m.text}</div>
+              </div>
+            </div>
+          );
+        }
+        const meta = META[m.role];
+        return (
+          <div key={m.id} className={`msg msg-${m.role}`}>
+            {m.role !== "user" && <div className={`avatar avatar-${m.role}`}>{meta.mono}</div>}
+            <div className="msg-body">
+              <div className="msg-meta">
+                <span className="msg-name">{meta.label}</span>
+                <span className="msg-n">#{m.n}</span>
+              </div>
+              <div className="msg-text">{m.text || (m.pending ? <Thinking /> : "")}</div>
+            </div>
           </div>
-            <div className="bubble-text">{m.text || (m.pending ? <span className="dots">思考中</span> : "")}</div>
-          </div>
-        </div>
-      ))}
+        );
+      })}
       <div ref={endRef} />
     </div>
   );
