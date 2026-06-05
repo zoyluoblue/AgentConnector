@@ -1,0 +1,77 @@
+// Channel names + payload types shared across main / preload / renderer.
+
+export type Role = "user" | "claude" | "codex" | "system";
+export type MsgKind = "text" | "plan" | "diff" | "review" | "progress" | "error";
+export type AgentKind = "claude" | "codex";
+export type Mode = "solo" | "collab";
+
+export interface ChatMessage {
+  id: string;
+  role: Role;
+  kind: MsgKind;
+  text: string;
+  ts: number;
+  /** which conversation this belongs to: claude (left) or codex (right) */
+  lane: AgentKind;
+  /** still being produced (shows a thinking/working state) */
+  pending?: boolean;
+}
+
+export interface ProjectInfo {
+  cwd: string | null;
+  name: string | null;
+}
+
+export interface AuthStatus {
+  connected: boolean;
+  /** e.g. account email or "ChatGPT" */
+  detail?: string;
+}
+
+export interface AuthState {
+  claude: AuthStatus;
+  codex: AuthStatus;
+}
+
+export interface BusyState {
+  claude: boolean;
+  codex: boolean;
+}
+
+export const CH = {
+  send: "chat:send",
+  abort: "chat:abort",
+  event: "chat:event",
+  busy: "chat:busy",
+  projectGet: "project:get",
+  projectPick: "project:pick",
+  projectEvent: "project:event",
+  authGet: "auth:get",
+  authConnect: "auth:connect",
+  authEvent: "auth:event",
+  modeGet: "mode:get",
+  modeSet: "mode:set",
+  modeEvent: "mode:event",
+  modelSet: "model:set",
+} as const;
+
+/** The surface exposed to the renderer as `window.studio`. */
+export interface StudioApi {
+  /** Send a message to one agent's conversation. */
+  send(text: string, target: AgentKind): Promise<void>;
+  abort(target: AgentKind): void;
+  getMode(): Promise<Mode>;
+  setMode(mode: Mode): void;
+  onMode(cb: (m: Mode) => void): () => void;
+  /** Set the model an agent should use ("" = the CLI default). */
+  setModel(agent: AgentKind, model: string): void;
+  /** A new or updated message (upsert by id). */
+  onEvent(cb: (m: ChatMessage) => void): () => void;
+  onBusy(cb: (b: BusyState) => void): () => void;
+  getProject(): Promise<ProjectInfo>;
+  pickProject(): Promise<ProjectInfo>;
+  onProject(cb: (p: ProjectInfo) => void): () => void;
+  getAuth(): Promise<AuthState>;
+  connect(kind: AgentKind): Promise<AuthStatus>;
+  onAuth(cb: (s: AuthState) => void): () => void;
+}
