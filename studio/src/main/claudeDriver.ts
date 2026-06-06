@@ -143,17 +143,38 @@ function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
   });
 }
 
-/** Run `claude -p`, retrying a couple times on transient network errors (socket closed, timeouts). */
+const MAX_TRIES = 5;
+
+/** Local proxy in effect (host:port), if any — these flake and cause "socket closed". */
+function proxyInUse(): string | null {
+  const p = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+  return p ? p.replace(/^https?:\/\//, "").replace(/\/$/, "") : null;
+}
+
+/**
+ * Run `claude -p`, retrying transient network errors (socket closed, timeouts).
+ * On a proxied network the proxy node intermittently drops connections, so we use
+ * exponential backoff + jitter to ride out a hiccup, then give an actionable message.
+ */
 export async function askClaude(ask: ClaudeAsk): Promise<ClaudeResult> {
   if (process.env.STUDIO_FAKE) return fakeClaude(ask);
   let last: ClaudeResult = { ok: false, text: "", error: "claude 未运行" };
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     if (ask.signal?.aborted) return { ok: false, text: "", error: "已停止" };
     last = await askClaudeOnce(ask);
     if (last.ok || !last.error || last.error === "已停止" || !TRANSIENT.test(last.error)) return last;
-    console.error(`[claude] transient error (try ${attempt + 1}/3): ${last.error.slice(0, 120)} — retrying`);
-    ask.onStatus?.(`重连中（第 ${attempt + 1} 次重试）`);
-    await delay(700 * (attempt + 1), ask.signal);
+    const next = attempt + 1;
+    console.error(`[claude] transient error (try ${next}/${MAX_TRIES}): ${last.error.slice(0, 120)} — retrying`);
+    if (next >= MAX_TRIES) break;
+    ask.onStatus?.(`重连中（第 ${next} 次重试）`);
+    // 0.8s, 1.6s, 3.2s, 6.4s (+jitter, capped) — rides out a multi-second proxy hiccup
+    const backoff = Math.min(800 * 2 ** attempt, 8000) + Math.floor(Math.random() * 400);
+    await delay(backoff, ask.signal);
   }
-  return { ...last, error: `${last.error ?? "网络错误"}（已重试 3 次仍失败，请稍后再试）` };
+  const proxy = proxyInUse();
+  log("claude.retry.exhausted", { tries: MAX_TRIES, proxy: proxy ?? "none", raw: last.error?.slice(0, 200) });
+  const hint = proxy
+    ? `网络连接被反复中断 —— 多半是本地代理（${proxy}）此刻不稳定。已自动重试 ${MAX_TRIES} 次仍失败，建议切换代理节点/模式后再发一次。`
+    : `网络连接被反复中断，已重试 ${MAX_TRIES} 次仍失败，请稍后再试。`;
+  return { ...last, error: hint };
 }
