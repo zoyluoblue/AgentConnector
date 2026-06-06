@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n";
 import type { ChatMessage } from "../../../shared/ipc";
 
@@ -94,14 +94,26 @@ interface Props {
   hasProject: boolean;
   emptyTitle: string;
   emptySub: string;
+  /** scroll to + briefly highlight this message (e.g. a search hit) */
+  focusId?: string;
 }
 
-export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Props) {
+export function Conversation({ messages, hasProject, emptyTitle, emptySub, focusId }: Props) {
   const { t } = useLang();
   const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [highlightId, setHighlightId] = useState<string | undefined>();
   useEffect(() => {
+    // If asked to focus a specific message that's present, scroll there; else stick to bottom.
+    const el = focusId ? listRef.current?.querySelector(`[data-mid="${focusId}"]`) : null;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightId(focusId);
+      const timer = setTimeout(() => setHighlightId(undefined), 2200);
+      return () => clearTimeout(timer);
+    }
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, focusId]);
 
   if (!hasProject || messages.length === 0) {
     return (
@@ -116,18 +128,26 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Pro
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-gutter flex flex-col gap-gutter">
-      {messages.map((m) =>
-        m.role === "user" ? (
-          <UserBubble key={m.id} m={m} />
-        ) : m.role === "system" ? (
-          <SystemLine key={m.id} m={m} />
-        ) : m.role === "claude" ? (
-          <ClaudeCard key={m.id} m={m} />
-        ) : (
-          <CodexCard key={m.id} m={m} />
-        ),
-      )}
+    <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto p-gutter flex flex-col gap-gutter">
+      {messages.map((m) => (
+        <div
+          key={m.id}
+          data-mid={m.id}
+          className={
+            m.id === highlightId ? "rounded-xl ring-2 ring-primary/60 ring-offset-2 ring-offset-surface-container-lowest transition-shadow" : ""
+          }
+        >
+          {m.role === "user" ? (
+            <UserBubble m={m} />
+          ) : m.role === "system" ? (
+            <SystemLine m={m} />
+          ) : m.role === "claude" ? (
+            <ClaudeCard m={m} />
+          ) : (
+            <CodexCard m={m} />
+          )}
+        </div>
+      ))}
       <div ref={endRef} />
     </div>
   );

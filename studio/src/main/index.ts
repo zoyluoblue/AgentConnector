@@ -13,6 +13,7 @@ import {
   type MsgKind,
   type ProjectInfo,
   type Role,
+  type SessionLoad,
 } from "../shared/ipc.js";
 import { agentLogin, agentStatus } from "./auth.js";
 import { askClaude } from "./claudeDriver.js";
@@ -20,6 +21,7 @@ import { askCodex } from "./codexDriver.js";
 import { changesSince, snapshot } from "./diff.js";
 import { fixPath } from "./fixPath.js";
 import { log, setLogFile, setLogSink } from "./log.js";
+import * as store from "./store.js";
 
 // GUI apps don't inherit the shell PATH — repair it so claude/codex/git resolve.
 fixPath();
@@ -98,7 +100,9 @@ function post(role: Role, kind: MsgKind, text: string, pending: boolean, id: str
     n = ++msgSeq;
     msgN.set(mid, n);
   }
-  send(CH.event, { id: mid, n, role, kind, text, ts: Date.now(), lane, pending } satisfies ChatMessage);
+  const msg: ChatMessage = { id: mid, n, role, kind, text, ts: Date.now(), lane, pending };
+  send(CH.event, msg);
+  store.recordMessage(msg); // persist for History / Search
   return mid;
 }
 
@@ -124,6 +128,7 @@ function setProject(p: string): void {
   projectCwd = resolved;
   claudeSession = undefined;
   codexThread = undefined;
+  store.startSession(resolved, basename(resolved), mode); // begin a fresh saved conversation
   log("project.set", { cwd: resolved });
   send(CH.projectEvent, projInfo());
 }
@@ -145,7 +150,10 @@ async function claudeTurn(prompt: string, system: string, phase = "思考中") {
     onStatus: (s) => setActivity("claude", s),
   });
   log("claude.turn.done", { ok: res.ok, len: res.text.length, err: res.error });
-  if (res.sessionId) claudeSession = res.sessionId;
+  if (res.sessionId) {
+    claudeSession = res.sessionId;
+    store.setAgentIds({ claudeSession }); // so "继续对话" can resume Claude's context
+  }
   post(res.ok ? "claude" : "system", res.ok ? "text" : "error", res.ok ? res.text : (res.error ?? "出错了"), false, pid, "claude");
   setActivity("claude", "");
   aborts.claude = null;
@@ -164,9 +172,13 @@ async function codexTurn(prompt: string, phase = "执行中") {
     model: agentModel.codex || undefined,
     signal: aborts.codex.signal,
     onDelta: (t) => post("codex", "text", t, true, pid, "codex"),
+    onStatus: (s) => setActivity("codex", s),
   });
   log("codex.turn.done", { ok: res.ok, len: res.text.length, steps: res.steps, err: res.error });
-  if (res.threadId) codexThread = res.threadId;
+  if (res.threadId) {
+    codexThread = res.threadId;
+    store.setAgentIds({ codexThread }); // so "继续对话" can resume Codex's thread
+  }
   const suffix = res.ok && res.steps ? `\n\n（执行了 ${res.steps} 步操作）` : "";
   post(res.ok ? "codex" : "system", res.ok ? "text" : "error", res.ok ? res.text + suffix : (res.error ?? "出错了"), false, pid, "codex");
   setActivity("codex", "");
@@ -263,6 +275,22 @@ function abortAll(): void {
   log("abort.all");
 }
 
+/** Load a saved conversation into the live chat and restore agent context for "继续对话". */
+function resumeSession(id: string, focusMessageId?: string): void {
+  const s = store.get(id);
+  if (!s) return;
+  abortAll();
+  cancelOrchestration = false;
+  projectCwd = s.projectCwd;
+  claudeSession = s.claudeSession;
+  codexThread = s.codexThread;
+  mode = s.mode;
+  store.adoptSession(s); // new messages append to this conversation
+  log("history.resume", { id, msgs: s.messages.length, mode });
+  send(CH.modeEvent, mode);
+  send(CH.sessionLoad, { project: projInfo(), mode, messages: s.messages, focusMessageId } satisfies SessionLoad);
+}
+
 // ---- auth: session-scoped, NOT persisted (disconnected by default each launch) ----
 const sessionAuth: AuthState = { claude: { connected: false }, codex: { connected: false } };
 async function connectAgent(kind: AgentKind): Promise<AuthStatus> {
@@ -303,8 +331,10 @@ function createWindow(): void {
     webPreferences: { preload: join(__dirname, "../preload/index.js"), contextIsolation: true, sandbox: false, webviewTag: true },
   });
 
-  if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  else void win.loadFile(join(__dirname, "../renderer/index.html"));
+  // Dev-only: STUDIO_VIEW=history|search opens straight to that view (for screenshots).
+  const initialHash = process.env.STUDIO_VIEW ? `view=${process.env.STUDIO_VIEW}` : "";
+  if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL + (initialHash ? `#${initialHash}` : ""));
+  else void win.loadFile(join(__dirname, "../renderer/index.html"), initialHash ? { hash: initialHash } : undefined);
 
   win.webContents.on("did-finish-load", () => console.error("[main] renderer loaded OK"));
   win.webContents.on("preload-error", (_e, p, err) => console.error(`[preload-error] ${p}:`, err));
@@ -344,6 +374,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   setLogFile(join(app.getPath("userData"), "logs", "agentconnector.log"));
   setLogSink((line) => send(CH.logLine, line));
+  store.initStore(join(app.getPath("userData"), "history"));
   log("app.ready", { mode, userData: app.getPath("userData") });
 
   ipcMain.handle(CH.send, (_e, p: { text: string; target: AgentKind }) => handleSend(p.text, p.target));
@@ -356,6 +387,7 @@ app.whenReady().then(() => {
   ipcMain.handle(CH.modeGet, () => mode);
   ipcMain.on(CH.modeSet, (_e, m: Mode) => {
     mode = m;
+    store.setMode(m);
     log("mode.set", { mode });
     send(CH.modeEvent, mode);
   });
@@ -381,12 +413,23 @@ app.whenReady().then(() => {
     return st;
   });
 
+  // ---- history & search ----
+  ipcMain.handle(CH.historyList, () => store.list());
+  ipcMain.handle(CH.historyGet, (_e, id: string) => store.get(id));
+  ipcMain.handle(CH.historyResume, (_e, p: { id: string; focusMessageId?: string }) => resumeSession(p.id, p.focusMessageId));
+  ipcMain.handle(CH.historyDelete, (_e, id: string) => store.remove(id));
+  ipcMain.handle(CH.historyRename, (_e, p: { id: string; title: string }) => store.rename(p.id, p.title));
+  ipcMain.handle(CH.searchQuery, (_e, q: string) => store.search(q));
+
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
+app.on("before-quit", () => store.flush()); // persist the in-flight conversation
+
 app.on("window-all-closed", () => {
+  store.flush();
   if (process.platform !== "darwin") app.quit();
 });

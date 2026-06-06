@@ -46,6 +46,51 @@ export interface ActivityState {
   codex: string;
 }
 
+/** Saved-conversation metadata used for history lists and search rows. */
+export interface SessionMeta {
+  id: string;
+  projectCwd: string;
+  projectName: string;
+  mode: Mode;
+  /** auto-derived from the first user message, user-editable */
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+}
+
+/** A full saved conversation: metadata + transcript + agent resume ids. */
+export interface Session extends SessionMeta {
+  messages: ChatMessage[];
+  /** claude --resume id, so "继续" restores Claude's context */
+  claudeSession?: string;
+  /** codex resume thread id, so "继续" restores Codex's context */
+  codexThread?: string;
+}
+
+/** One search match inside a saved session. */
+export interface SearchHit {
+  sessionId: string;
+  sessionTitle: string;
+  projectName: string;
+  messageId: string;
+  n: number;
+  role: Role;
+  lane: AgentKind;
+  ts: number;
+  /** text around the match, trimmed for display */
+  snippet: string;
+}
+
+/** Payload pushed to the renderer when a saved session is resumed into the live chat. */
+export interface SessionLoad {
+  project: ProjectInfo;
+  mode: Mode;
+  messages: ChatMessage[];
+  /** message to scroll to + briefly highlight (e.g. a search hit) */
+  focusMessageId?: string;
+}
+
 export const CH = {
   send: "chat:send",
   abort: "chat:abort",
@@ -65,6 +110,13 @@ export const CH = {
   previewGet: "preview:get",
   previewRefresh: "preview:refresh",
   logLine: "log:line",
+  historyList: "history:list",
+  historyGet: "history:get",
+  historyResume: "history:resume",
+  historyDelete: "history:delete",
+  historyRename: "history:rename",
+  searchQuery: "search:query",
+  sessionLoad: "session:load",
 } as const;
 
 /** The surface exposed to the renderer as `window.studio`. */
@@ -91,4 +143,16 @@ export interface StudioApi {
   getAuth(): Promise<AuthState>;
   connect(kind: AgentKind): Promise<AuthStatus>;
   onAuth(cb: (s: AuthState) => void): () => void;
+  // ---- history & search ----
+  /** All saved conversations, newest first. */
+  listHistory(): Promise<SessionMeta[]>;
+  /** Full transcript of one saved conversation (read-only view). */
+  getSession(id: string): Promise<Session | null>;
+  /** Load a saved conversation into the live chat and restore agent context. */
+  resumeSession(id: string, focusMessageId?: string): Promise<void>;
+  deleteSession(id: string): Promise<void>;
+  renameSession(id: string, title: string): Promise<void>;
+  /** Full-text search across every saved conversation. */
+  search(query: string): Promise<SearchHit[]>;
+  onSessionLoad(cb: (p: SessionLoad) => void): () => void;
 }

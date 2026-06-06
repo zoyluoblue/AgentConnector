@@ -8,6 +8,7 @@ import {
   type ChatMessage,
   type Mode,
   type ProjectInfo,
+  type SessionLoad,
   type StudioApi,
 } from "../shared/ipc.js";
 
@@ -61,6 +62,17 @@ const api: StudioApi = {
     const h = (_e: IpcRendererEvent, s: AuthState) => cb(s);
     ipcRenderer.on(CH.authEvent, h);
     return () => ipcRenderer.off(CH.authEvent, h);
+  },
+  listHistory: () => ipcRenderer.invoke(CH.historyList),
+  getSession: (id) => ipcRenderer.invoke(CH.historyGet, id),
+  resumeSession: (id, focusMessageId) => ipcRenderer.invoke(CH.historyResume, { id, focusMessageId }),
+  deleteSession: (id) => ipcRenderer.invoke(CH.historyDelete, id),
+  renameSession: (id, title) => ipcRenderer.invoke(CH.historyRename, { id, title }),
+  search: (query) => ipcRenderer.invoke(CH.searchQuery, query),
+  onSessionLoad: (cb) => {
+    const h = (_e: IpcRendererEvent, p: SessionLoad) => cb(p);
+    ipcRenderer.on(CH.sessionLoad, h);
+    return () => ipcRenderer.off(CH.sessionLoad, h);
   },
 };
 

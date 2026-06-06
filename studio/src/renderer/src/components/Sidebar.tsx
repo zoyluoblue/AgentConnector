@@ -1,11 +1,19 @@
 import { useLang } from "../i18n";
 
-export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
+export type View = "chat" | "history" | "search";
+
+interface Props {
+  onNewProject: () => void;
+  view: View;
+  onView: (v: View) => void;
+}
+
+export function Sidebar({ onNewProject, view, onView }: Props) {
   const { t } = useLang();
-  const NAV: { icon: string; label: string; active?: boolean }[] = [
-    { icon: "folder_open", label: "Explorer", active: true },
-    { icon: "search", label: t("search") },
-    { icon: "history", label: t("history") },
+  const NAV: { icon: string; label: string; view?: View }[] = [
+    { icon: "folder_open", label: t("explorer"), view: "chat" },
+    { icon: "search", label: t("search"), view: "search" },
+    { icon: "history", label: t("history"), view: "history" },
     { icon: "extension", label: t("extensions") },
     { icon: "settings", label: t("settings") },
   ];
@@ -29,20 +37,27 @@ export function Sidebar({ onNewProject }: { onNewProject: () => void }) {
           <span className="material-symbols-outlined text-[18px]">add</span>
           <span>{t("newProject")}</span>
         </button>
-        {NAV.map((n) => (
-          <button
-            type="button"
-            key={n.icon}
-            className={`w-full flex items-center gap-stack_sm px-stack_md py-stack_sm rounded-lg transition-colors ${
-              n.active
-                ? "bg-primary-container/10 text-primary font-semibold"
-                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50"
-            }`}
-          >
-            <span className="material-symbols-outlined">{n.icon}</span>
-            <span className="font-body-lg">{n.label}</span>
-          </button>
-        ))}
+        {NAV.map((n) => {
+          const active = n.view !== undefined && n.view === view;
+          return (
+            <button
+              type="button"
+              key={n.icon}
+              disabled={!n.view}
+              onClick={() => n.view && onView(n.view)}
+              className={`w-full flex items-center gap-stack_sm px-stack_md py-stack_sm rounded-lg transition-colors ${
+                active
+                  ? "bg-primary-container/10 text-primary font-semibold"
+                  : n.view
+                    ? "text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50"
+                    : "text-on-surface-variant/40 cursor-default"
+              }`}
+            >
+              <span className="material-symbols-outlined">{n.icon}</span>
+              <span className="font-body-lg">{n.label}</span>
+            </button>
+          );
+        })}
       </nav>
       <div className="mt-auto px-3 space-y-1">
         {[

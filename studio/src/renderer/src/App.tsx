@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "./i18n";
 import type { ActivityState, AgentKind, AuthState, BusyState, ChatMessage, Mode, ProjectInfo } from "../../shared/ipc";
 import { AgentPanel } from "./components/AgentPanel";
-import { Sidebar } from "./components/Sidebar";
+import { HistoryView } from "./components/HistoryView";
+import { SearchView } from "./components/SearchView";
+import { Sidebar, type View } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
 const DISCONNECTED: AuthState = { claude: { connected: false }, codex: { connected: false } };
@@ -36,6 +38,20 @@ export function App() {
   const [mode, setMode] = useState<Mode>("solo");
   const [connecting, setConnecting] = useState<Record<AgentKind, boolean>>({ claude: false, codex: false });
   const [models, setModels] = useState<Record<AgentKind, string>>({ claude: "", codex: "" });
+  const initialHash = useMemo(() => new URLSearchParams(window.location.hash.slice(1)), []);
+  const [view, setView] = useState<View>(() => {
+    const h = initialHash.get("view");
+    return h === "history" || h === "search" ? h : "chat";
+  });
+  const [focusId, setFocusId] = useState<string | undefined>();
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Briefly mark a message for scroll-to + highlight, then release it so live tailing resumes.
+  const focusMessage = (id: string) => {
+    if (focusTimer.current) clearTimeout(focusTimer.current);
+    setFocusId(id);
+    focusTimer.current = setTimeout(() => setFocusId(undefined), 2600);
+  };
 
   useEffect(() => {
     const offEvent = window.studio.onEvent((m) => {
@@ -55,6 +71,14 @@ export function App() {
     });
     const offAuth = window.studio.onAuth(setAuth);
     const offMode = window.studio.onMode(setMode);
+    const offSession = window.studio.onSessionLoad((p) => {
+      // A saved conversation was resumed into the live chat — swap state in one shot.
+      setProject(p.project);
+      setMode(p.mode);
+      setMessages(p.messages);
+      setView("chat");
+      if (p.focusMessageId) focusMessage(p.focusMessageId);
+    });
     void window.studio.getProject().then(setProject);
     void window.studio.getAuth().then(setAuth);
     void window.studio.getMode().then(setMode);
@@ -65,6 +89,7 @@ export function App() {
       offProject();
       offAuth();
       offMode();
+      offSession();
     };
   }, []);
 
@@ -90,7 +115,10 @@ export function App() {
     setModels((mm) => ({ ...mm, [agent]: v }));
     window.studio.setModel(agent, v);
   };
-  const pick = () => void window.studio.pickProject();
+  const pick = () => {
+    setView("chat");
+    void window.studio.pickProject();
+  };
 
   const headerProps = (kind: AgentKind) => ({
     kind,
@@ -134,27 +162,42 @@ export function App() {
 
   return (
     <div className="h-screen flex bg-background text-on-surface overflow-hidden">
-      <Sidebar onNewProject={pick} />
+      <Sidebar onNewProject={pick} view={view} onView={setView} />
       <main className="flex-1 min-w-0 flex flex-col">
         <TopBar project={project} mode={mode} onMode={changeMode} onPick={pick} />
-        <div className="flex-1 min-h-0 flex p-gutter gap-gutter bg-surface-container-lowest">
-          <AgentPanel
-            header={headerProps("claude")}
-            messages={claudeMsgs}
-            hasProject={!!project.cwd}
-            emptyTitle={collab ? t("claudeTitleCollab") : t("claudeTitleSolo")}
-            emptySub={collab ? t("claudeSubCollab") : t("claudeSubSolo")}
-            composer={claudeComposer}
+        {view === "history" ? (
+          <HistoryView />
+        ) : view === "search" ? (
+          <SearchView
+            currentMessages={messages}
+            initialQuery={initialHash.get("q") ?? ""}
+            onJumpCurrent={(id) => {
+              setView("chat");
+              focusMessage(id);
+            }}
           />
-          <AgentPanel
-            header={headerProps("codex")}
-            messages={codexMsgs}
-            hasProject={!!project.cwd}
-            emptyTitle={collab ? t("codexTitleCollab") : t("codexTitle")}
-            emptySub={collab ? t("codexSubCollab") : t("codexSub")}
-            composer={codexComposer}
-          />
-        </div>
+        ) : (
+          <div className="flex-1 min-h-0 flex p-gutter gap-gutter bg-surface-container-lowest">
+            <AgentPanel
+              header={headerProps("claude")}
+              messages={claudeMsgs}
+              hasProject={!!project.cwd}
+              emptyTitle={collab ? t("claudeTitleCollab") : t("claudeTitleSolo")}
+              emptySub={collab ? t("claudeSubCollab") : t("claudeSubSolo")}
+              composer={claudeComposer}
+              focusId={focusId}
+            />
+            <AgentPanel
+              header={headerProps("codex")}
+              messages={codexMsgs}
+              hasProject={!!project.cwd}
+              emptyTitle={collab ? t("codexTitleCollab") : t("codexTitle")}
+              emptySub={collab ? t("codexSubCollab") : t("codexSub")}
+              composer={codexComposer}
+              focusId={focusId}
+            />
+          </div>
+        )}
       </main>
     </div>
   );
