@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "./i18n";
 import type { AgentKind, AuthState, BusyState, ChatMessage, Mode, ProjectInfo } from "../../shared/ipc";
-import { AgentPanelHeader } from "./components/AgentPanelHeader";
-import { Composer } from "./components/Composer";
-import { Conversation } from "./components/Conversation";
-import { LivePreview } from "./components/LivePreview";
+import { AgentPanel } from "./components/AgentPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
@@ -27,8 +24,6 @@ const CODEX_MODELS = [
   { v: "gpt-5.4-mini", label: "GPT-5.4-Mini" },
   { v: "gpt-5.3-codex-spark", label: "GPT-5.3-Codex-Spark" },
 ];
-
-const PANEL_CARD = "flex-1 min-h-0 flex flex-col bg-surface rounded-xl border border-outline-variant/30 overflow-hidden mac-shadow";
 
 export function App() {
   const { t } = useLang();
@@ -105,22 +100,34 @@ export function App() {
     onModel: (v: string) => changeModel(kind, v),
   });
 
-  // left composer (Claude / orchestration)
-  const leftDisabled = !project.cwd || !auth.claude.connected || (collab && !auth.codex.connected);
-  const leftBusy = collab ? anyBusy : busy.claude;
-  const leftPh = !project.cwd
-    ? t("phPickFolder")
-    : leftDisabled
-      ? collab
-        ? t("phConnectBoth")
-        : t("phConnectClaude")
-      : collab
-        ? t("phCollab")
-        : t("phClaude");
+  // Claude composer (chat in solo / orchestration goal in collab)
+  const claudeDisabled = !project.cwd || !auth.claude.connected || (collab && !auth.codex.connected);
+  const claudeComposer = {
+    busy: collab ? anyBusy : busy.claude,
+    disabled: claudeDisabled,
+    placeholder: !project.cwd
+      ? t("phPickFolder")
+      : claudeDisabled
+        ? collab
+          ? t("phConnectBoth")
+          : t("phConnectClaude")
+        : collab
+          ? t("phCollab")
+          : t("phClaude"),
+    onSend: (x: string) => void window.studio.send(x, "claude"),
+    onStop: () => window.studio.abort("claude"),
+  };
 
-  // right composer (Codex chat — solo only)
-  const codexDisabled = !project.cwd || !auth.codex.connected;
-  const codexPh = !project.cwd ? t("phPickFolder") : !auth.codex.connected ? t("phConnectCodex") : t("phCodex");
+  // Codex composer — solo only (collab auto-drives Codex)
+  const codexComposer = collab
+    ? undefined
+    : {
+        busy: busy.codex,
+        disabled: !project.cwd || !auth.codex.connected,
+        placeholder: !project.cwd ? t("phPickFolder") : !auth.codex.connected ? t("phConnectCodex") : t("phCodex"),
+        onSend: (x: string) => void window.studio.send(x, "codex"),
+        onStop: () => window.studio.abort("codex"),
+      };
 
   return (
     <div className="h-screen flex bg-background text-on-surface overflow-hidden">
@@ -128,50 +135,22 @@ export function App() {
       <main className="flex-1 min-w-0 flex flex-col">
         <TopBar project={project} mode={mode} onMode={changeMode} onPick={pick} />
         <div className="flex-1 min-h-0 flex p-gutter gap-gutter bg-surface-container-lowest">
-          {/* Claude column */}
-          <div className="w-1/2 min-w-0 flex flex-col gap-gutter min-h-0">
-            <AgentPanelHeader {...headerProps("claude")} />
-            <div className={PANEL_CARD}>
-              <Conversation
-                messages={collab ? messages : claudeMsgs}
-                hasProject={!!project.cwd}
-                emptyTitle={collab ? t("claudeTitleCollab") : t("claudeTitleSolo")}
-                emptySub={collab ? t("claudeSubCollab") : t("claudeSubSolo")}
-              />
-              <Composer
-                busy={leftBusy}
-                disabled={leftDisabled}
-                placeholder={leftPh}
-                onSend={(x) => void window.studio.send(x, "claude")}
-                onStop={() => window.studio.abort("claude")}
-              />
-            </div>
-          </div>
-          {/* Codex column */}
-          <div className="w-1/2 min-w-0 flex flex-col gap-gutter min-h-0">
-            <AgentPanelHeader {...headerProps("codex")} />
-            <div className={PANEL_CARD}>
-              {collab ? (
-                <LivePreview />
-              ) : (
-                <>
-                  <Conversation
-                    messages={codexMsgs}
-                    hasProject={!!project.cwd}
-                    emptyTitle={t("codexTitle")}
-                    emptySub={t("codexSub")}
-                  />
-                  <Composer
-                    busy={busy.codex}
-                    disabled={codexDisabled}
-                    placeholder={codexPh}
-                    onSend={(x) => void window.studio.send(x, "codex")}
-                    onStop={() => window.studio.abort("codex")}
-                  />
-                </>
-              )}
-            </div>
-          </div>
+          <AgentPanel
+            header={headerProps("claude")}
+            messages={claudeMsgs}
+            hasProject={!!project.cwd}
+            emptyTitle={collab ? t("claudeTitleCollab") : t("claudeTitleSolo")}
+            emptySub={collab ? t("claudeSubCollab") : t("claudeSubSolo")}
+            composer={claudeComposer}
+          />
+          <AgentPanel
+            header={headerProps("codex")}
+            messages={codexMsgs}
+            hasProject={!!project.cwd}
+            emptyTitle={collab ? t("codexTitleCollab") : t("codexTitle")}
+            emptySub={collab ? t("codexSubCollab") : t("codexSub")}
+            composer={codexComposer}
+          />
         </div>
       </main>
     </div>

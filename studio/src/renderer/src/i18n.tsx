@@ -23,6 +23,8 @@ const STR = {
   system: { zh: "系统", en: "System" },
   thinking: { zh: "思考中", en: "Thinking" },
   executing: { zh: "执行中…", en: "Executing…" },
+  tabChat: { zh: "对话", en: "Chat" },
+  tabPreview: { zh: "预览", en: "Preview" },
   livePreview: { zh: "Live Preview", en: "Live Preview" },
   noPreview: { zh: "暂无可预览的页面", en: "Nothing to preview yet" },
   noPreviewSub: {
@@ -44,6 +46,8 @@ const STR = {
   },
   codexTitle: { zh: "直接和 Codex 对话", en: "Chat directly with Codex" },
   codexSub: { zh: "让 Codex 帮你写代码、改文件。", en: "Ask Codex to write code or edit files." },
+  codexTitleCollab: { zh: "Codex 执行区", en: "Codex execution" },
+  codexSubCollab: { zh: "Claude 规划后，Codex 会在这里自动执行。", en: "After Claude plans, Codex executes here automatically." },
   phPickFolder: { zh: "先选项目文件夹…", en: "Select a project folder first…" },
   phConnectClaude: { zh: "请先连接 Claude…", en: "Connect Claude first…" },
   phConnectCodex: { zh: "请先连接 Codex…", en: "Connect Codex first…" },

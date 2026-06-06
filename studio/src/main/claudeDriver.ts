@@ -86,6 +86,22 @@ function parseEnvelope(out: string, code: number | null, err: string): ClaudeRes
   return { ok: true, text, structured, sessionId };
 }
 
+/**
+ * Build a clean env for the spawned claude: drop a proxy base URL / injected API keys
+ * and harness vars so it uses the default endpoint + the user's normal login. This fixes
+ * "socket connection closed unexpectedly" when a proxy with a short timeout drops long requests.
+ */
+function spawnEnv(): NodeJS.ProcessEnv {
+  const e: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined) continue;
+    if (k.startsWith("CLAUDE_CODE_")) continue;
+    if (k === "ANTHROPIC_BASE_URL" || k === "ANTHROPIC_API_KEY" || k === "ANTHROPIC_AUTH_TOKEN" || k === "ANTHROPIC_MODEL") continue;
+    e[k] = v;
+  }
+  return e;
+}
+
 function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
   return new Promise((resolve) => {
     const bin = resolveBin("claude");
@@ -108,8 +124,8 @@ function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
       resolve(r);
     };
 
-    log("claude.exec", { model: ask.model || "default", resume: !!ask.sessionId, cwd: ask.cwd });
-    const child = spawn(bin, argv, { cwd: ask.cwd, stdio: ["ignore", "pipe", "pipe"], env: process.env });
+    log("claude.exec", { model: ask.model || "default", resume: !!ask.sessionId, cwd: ask.cwd, baseUrl: process.env.ANTHROPIC_BASE_URL ? "stripped" : "default" });
+    const child = spawn(bin, argv, { cwd: ask.cwd, stdio: ["ignore", "pipe", "pipe"], env: spawnEnv() });
     ask.signal?.addEventListener("abort", () => {
       try {
         child.kill("SIGKILL");

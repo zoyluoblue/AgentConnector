@@ -17,6 +17,7 @@ function ClaudeCard({ m }: { m: ChatMessage }) {
   return (
     <div className="bg-claude/5 border border-claude/20 rounded-xl p-stack_md mac-shadow">
       <div className="flex items-center gap-stack_sm mb-stack_sm">
+        <span className="text-label-caps font-bold text-claude/50">#{m.n}</span>
         <div className="w-8 h-8 rounded-full bg-claude flex items-center justify-center text-white">
           <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
             psychology
@@ -24,9 +25,7 @@ function ClaudeCard({ m }: { m: ChatMessage }) {
         </div>
         <div className="leading-tight">
           <h3 className="font-headline text-body-lg font-bold text-claude">Claude</h3>
-          <p className="text-label-caps text-claude/60">
-            #{m.n} · {t("planReview")}
-          </p>
+          <p className="text-label-caps text-claude/60">{t("planReview")}</p>
         </div>
       </div>
       <div className="text-body-lg text-on-surface whitespace-pre-wrap">{m.text || (m.pending ? <Thinking /> : "")}</div>
@@ -40,12 +39,13 @@ function CodexCard({ m }: { m: ChatMessage }) {
     <div className="bg-surface rounded-xl border border-outline-variant/30 overflow-hidden mac-shadow">
       <div className="flex items-center justify-between px-stack_md py-2 bg-surface-container">
         <div className="flex items-center gap-stack_sm">
+          <span className="text-[11px] font-bold text-on-surface-variant/60">#{m.n}</span>
           <div className="w-6 h-6 rounded bg-on-surface flex items-center justify-center text-surface">
             <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
               code
             </span>
           </div>
-          <span className="text-body-sm font-code font-medium">Codex · #{m.n}</span>
+          <span className="text-body-sm font-code font-medium">Codex</span>
         </div>
         {m.pending && <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">EXECUTING</span>}
       </div>
@@ -58,7 +58,8 @@ function CodexCard({ m }: { m: ChatMessage }) {
 
 function UserBubble({ m }: { m: ChatMessage }) {
   return (
-    <div className="flex justify-end">
+    <div className="flex flex-col items-end gap-1">
+      <span className="text-[11px] font-bold text-on-surface-variant/45 pr-1">#{m.n}</span>
       <div className="max-w-[82%] bg-primary text-white rounded-xl rounded-tr-sm px-stack_md py-stack_sm text-body-lg whitespace-pre-wrap mac-shadow">
         {m.text}
       </div>
