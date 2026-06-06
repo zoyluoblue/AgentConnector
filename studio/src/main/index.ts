@@ -6,9 +6,11 @@ import {
   type AgentKind,
   type AuthState,
   type AuthStatus,
+  type Backend,
   type BusyState,
   CH,
   type ChatMessage,
+  type Lane,
   type Mode,
   type MsgKind,
   type ProjectInfo,
@@ -18,10 +20,11 @@ import {
 import { agentLogin, agentStatus } from "./auth.js";
 import { askClaude } from "./claudeDriver.js";
 import { askCodex } from "./codexDriver.js";
+import { askDeepseek } from "./deepseekDriver.js";
 import { changesSince, snapshot } from "./diff.js";
 import { fixPath } from "./fixPath.js";
 import { log, setLogFile, setLogSink } from "./log.js";
-import { getSettings, initSettings, updateSettings } from "./settings.js";
+import { backendFor, deepseekKey, getSettings, initSettings, updateSettings } from "./settings.js";
 import * as store from "./store.js";
 
 // GUI apps don't inherit the shell PATH — repair it so claude/codex/git resolve.
@@ -32,8 +35,9 @@ const MAX_REVISE = 3;
 let win: BrowserWindow | null = null;
 let projectCwd: string | null = null;
 let mode: Mode = process.env.STUDIO_MODE === "collab" ? "collab" : "solo";
-let claudeSession: string | undefined;
-let codexThread: string | undefined;
+// Per-lane session continuity, keyed by lane (a lane can switch backends).
+const claudeSessions: Record<AgentKind, string | undefined> = { claude: undefined, codex: undefined };
+const codexThreads: Record<AgentKind, string | undefined> = { claude: undefined, codex: undefined };
 let cancelOrchestration = false;
 const busy: BusyState = { claude: false, codex: false };
 const aborts: Record<AgentKind, AbortController | null> = { claude: null, codex: null };
@@ -51,9 +55,15 @@ function withIntervene(prompt: string, lane: AgentKind): string {
 
 const PLANNER_SYSTEM =
   "你是 AgentConnector 的规划助手，面向不懂编程的用户。用简洁、友好的中文交流，避免专业黑话。" +
-  "把用户想做的东西拆成简短的分步实现计划（3 步以内），供 Codex 执行。只输出计划本身，不要写代码。";
+  "把用户想做的东西拆成简短的分步实现计划（3 步以内），供右栏的执行方实现。只输出计划本身，不要写代码。";
 const REVIEWER_SYSTEM =
-  "你是严谨的代码审查员。基于用户目标和 Codex 刚做的改动（含文件内容），判断是否达成目标且没有明显问题。用简洁中文。";
+  "你是严谨的代码审查员。基于用户目标和执行方刚做的改动（含文件内容），判断是否达成目标且没有明显问题。用简洁中文。";
+const EXECUTOR_SYSTEM = "你是编码执行者，根据计划直接在当前项目里新建/修改文件实现需求，完成后用一两句话说明你做了哪些改动。";
+const BACKEND_NAME: Record<Backend, string> = { claude: "Claude", codex: "Codex", deepseek: "DeepSeek" };
+/** Left lane (claude key) is the master/planner; right lane (codex key) is the slave/executor. */
+function laneOf(kind: AgentKind): Lane {
+  return kind === "claude" ? "master" : "slave";
+}
 
 function planPrompt(goal: string): string {
   return `用户目标：${goal}\n\n请给出一个简短的分步实现计划（3 步以内），供 Codex 执行。`;
@@ -94,14 +104,14 @@ function setActivity(kind: AgentKind, text: string): void {
 // ---- messages (with a stable sequence number per id for referencing turns) ----
 let msgSeq = 0;
 const msgN = new Map<string, number>();
-function post(role: Role, kind: MsgKind, text: string, pending: boolean, id: string | undefined, lane: AgentKind): string {
+function post(role: Role, kind: MsgKind, text: string, pending: boolean, id: string | undefined, lane: AgentKind, agentName?: string): string {
   const mid = id ?? `m${Date.now().toString(36)}_${msgSeq}`;
   let n = msgN.get(mid);
   if (n === undefined) {
     n = ++msgSeq;
     msgN.set(mid, n);
   }
-  const msg: ChatMessage = { id: mid, n, role, kind, text, ts: Date.now(), lane, pending };
+  const msg: ChatMessage = { id: mid, n, role, kind, text, ts: Date.now(), lane, agentName, pending };
   send(CH.event, msg);
   store.recordMessage(msg); // persist for History / Search
   return mid;
@@ -127,64 +137,68 @@ function setProject(p: string): void {
     /* keep as-is */
   }
   projectCwd = resolved;
-  claudeSession = undefined;
-  codexThread = undefined;
+  claudeSessions.claude = claudeSessions.codex = undefined;
+  codexThreads.claude = codexThreads.codex = undefined;
   store.startSession(resolved, basename(resolved), mode); // begin a fresh saved conversation
   log("project.set", { cwd: resolved });
   send(CH.projectEvent, projInfo());
 }
 
-// ---- single agent turns (post to a lane + return the result) ----
-async function claudeTurn(prompt: string, system: string, phase = "思考中") {
-  const pid = post("claude", "text", "", true, undefined, "claude");
-  setActivity("claude", phase);
-  aborts.claude = new AbortController();
-  log("claude.turn.start", { phase, model: agentModel.claude || "default", promptLen: prompt.length, cwd: projectCwd });
-  const res = await askClaude({
-    prompt,
-    cwd: projectCwd as string,
-    sessionId: claudeSession,
-    systemPrompt: system,
-    disableTools: true,
-    model: agentModel.claude || undefined,
-    signal: aborts.claude.signal,
-    onStatus: (s) => setActivity("claude", s),
-  });
-  log("claude.turn.done", { ok: res.ok, len: res.text.length, err: res.error });
-  if (res.sessionId) {
-    claudeSession = res.sessionId;
-    store.setAgentIds({ claudeSession }); // so "继续对话" can resume Claude's context
+// ---- one lane's turn, dispatched to its configured backend ----
+// `write` = executor role (edits files): slave lane, or anything that should change the project.
+async function laneTurn(kind: AgentKind, prompt: string, system: string, phase: string, write: boolean) {
+  const lane = laneOf(kind);
+  const backend = backendFor(lane);
+  const name = BACKEND_NAME[backend];
+  const pid = post(kind, write ? "progress" : "text", write ? `${name} 正在处理…` : "", true, undefined, kind, name);
+  setActivity(kind, phase);
+  aborts[kind] = new AbortController();
+  const signal = aborts[kind]?.signal;
+  const model = agentModel[kind] || undefined;
+  log("lane.turn.start", { lane, backend, phase, write, model: model ?? "default", promptLen: prompt.length, cwd: projectCwd });
+
+  let res: { ok: boolean; text: string; error?: string };
+  if (backend === "claude") {
+    const r = await askClaude({
+      prompt,
+      cwd: projectCwd as string,
+      sessionId: claudeSessions[kind],
+      systemPrompt: system,
+      disableTools: !write,
+      allowWrite: write,
+      lane,
+      model,
+      signal,
+      onStatus: (s) => setActivity(kind, s),
+    });
+    if (r.sessionId) claudeSessions[kind] = r.sessionId;
+    res = { ok: r.ok, text: r.text, error: r.error };
+  } else if (backend === "codex") {
+    const r = await askCodex({
+      prompt,
+      cwd: projectCwd as string,
+      threadId: codexThreads[kind],
+      sandbox: write ? "workspace-write" : "read-only",
+      lane,
+      model,
+      signal,
+      onDelta: (t) => post(kind, "text", t, true, pid, kind, name),
+      onStatus: (s) => setActivity(kind, s),
+    });
+    if (r.threadId) codexThreads[kind] = r.threadId;
+    const suffix = r.ok && r.steps ? `\n\n（执行了 ${r.steps} 步操作）` : "";
+    res = { ok: r.ok, text: r.ok ? r.text + suffix : r.text, error: r.error };
+  } else {
+    const r = await askDeepseek({ prompt, systemPrompt: system, model, apiKey: deepseekKey(), signal });
+    res = { ok: r.ok, text: r.text, error: r.error };
   }
-  post(res.ok ? "claude" : "system", res.ok ? "text" : "error", res.ok ? res.text : (res.error ?? "出错了"), false, pid, "claude");
-  setActivity("claude", "");
-  aborts.claude = null;
-  return res;
-}
-async function codexTurn(prompt: string, phase = "执行中") {
-  const pid = post("codex", "progress", "Codex 正在处理…", true, undefined, "codex");
-  setActivity("codex", phase);
-  aborts.codex = new AbortController();
-  log("codex.turn.start", { model: agentModel.codex || "default", promptLen: prompt.length, cwd: projectCwd });
-  const res = await askCodex({
-    prompt,
-    cwd: projectCwd as string,
-    threadId: codexThread,
-    sandbox: "workspace-write",
-    model: agentModel.codex || undefined,
-    signal: aborts.codex.signal,
-    onDelta: (t) => post("codex", "text", t, true, pid, "codex"),
-    onStatus: (s) => setActivity("codex", s),
-  });
-  log("codex.turn.done", { ok: res.ok, len: res.text.length, steps: res.steps, err: res.error });
-  if (res.threadId) {
-    codexThread = res.threadId;
-    store.setAgentIds({ codexThread }); // so "继续对话" can resume Codex's thread
-  }
-  const suffix = res.ok && res.steps ? `\n\n（执行了 ${res.steps} 步操作）` : "";
-  post(res.ok ? "codex" : "system", res.ok ? "text" : "error", res.ok ? res.text + suffix : (res.error ?? "出错了"), false, pid, "codex");
-  setActivity("codex", "");
-  aborts.codex = null;
-  send(CH.previewRefresh, previewUrl()); // codex may have changed files -> refresh the live preview
+
+  log("lane.turn.done", { lane, backend, ok: res.ok, len: res.text.length, err: res.error });
+  store.setAgentIds({ claudeSession: claudeSessions.claude, codexThread: codexThreads.codex }); // best-effort resume ids
+  post(res.ok ? kind : "system", res.ok ? "text" : "error", res.ok ? res.text : (res.error ?? "出错了"), false, pid, kind, name);
+  setActivity(kind, "");
+  aborts[kind] = null;
+  if (write) send(CH.previewRefresh, previewUrl()); // executor may have changed files
   return res;
 }
 
@@ -202,23 +216,23 @@ async function runOrchestration(goal: string): Promise<void> {
   log("orchestration.start", { goal: goal.slice(0, 120) });
   post("user", "text", goal, false, undefined, "claude");
 
-  const plan = await claudeTurn(withIntervene(planPrompt(goal), "claude"), PLANNER_SYSTEM, "规划中");
+  const plan = await laneTurn("claude", withIntervene(planPrompt(goal), "claude"), PLANNER_SYSTEM, "规划中", false);
   if (orchStopped()) return;
   if (!plan.ok) return;
 
   const before = snapshot(projectCwd as string);
-  const exec = await codexTurn(withIntervene(executePrompt(plan.text), "codex"), "执行中");
+  const exec = await laneTurn("codex", withIntervene(executePrompt(plan.text), "codex"), EXECUTOR_SYSTEM, "执行中", true);
   if (orchStopped()) return;
   if (!exec.ok) return;
 
   for (let iter = 0; iter < MAX_REVISE; iter++) {
     const diff = changesSince(before, projectCwd as string);
     log("orchestration.review", { iter, diffLen: diff.length });
-    const review = await claudeTurn(withIntervene(reviewPrompt(goal, diff), "claude"), REVIEWER_SYSTEM, "审查中");
+    const review = await laneTurn("claude", withIntervene(reviewPrompt(goal, diff), "claude"), REVIEWER_SYSTEM, "审查中", false);
     if (orchStopped()) return;
     if (!review.ok) return;
     if (verdictPass(review.text)) {
-      post("system", "text", "✅ 完成：Claude 审查通过。", false, undefined, "claude");
+      post("system", "text", `✅ 完成：${BACKEND_NAME[backendFor("master")]} 审查通过。`, false, undefined, "claude");
       log("orchestration.done", { iter });
       return;
     }
@@ -227,7 +241,7 @@ async function runOrchestration(goal: string): Promise<void> {
       log("orchestration.exhausted");
       return;
     }
-    const revise = await codexTurn(withIntervene(revisePrompt(review.text), "codex"), "修订中");
+    const revise = await laneTurn("codex", withIntervene(revisePrompt(review.text), "codex"), EXECUTOR_SYSTEM, "修订中", true);
     if (orchStopped()) return;
     if (!revise.ok) return;
   }
@@ -261,7 +275,10 @@ async function handleSend(text: string, target: AgentKind): Promise<void> {
     post("user", "text", text, false, undefined, target);
     let next: string | null = text;
     while (next) {
-      const res = target === "claude" ? await claudeTurn(next, PLANNER_SYSTEM) : await codexTurn(next);
+      const res =
+        target === "claude"
+          ? await laneTurn("claude", next, PLANNER_SYSTEM, "思考中", false)
+          : await laneTurn("codex", next, EXECUTOR_SYSTEM, "执行中", true);
       if (!res.ok) break;
       next = intervene[target] || null; // a follow-up that was interjected mid-turn
       intervene[target] = "";
@@ -283,8 +300,10 @@ function resumeSession(id: string, focusMessageId?: string): void {
   abortAll();
   cancelOrchestration = false;
   projectCwd = s.projectCwd;
-  claudeSession = s.claudeSession;
-  codexThread = s.codexThread;
+  claudeSessions.claude = s.claudeSession; // best-effort: master claude / slave codex
+  claudeSessions.codex = undefined;
+  codexThreads.codex = s.codexThread;
+  codexThreads.claude = undefined;
   mode = s.mode;
   store.adoptSession(s); // new messages append to this conversation
   log("history.resume", { id, msgs: s.messages.length, mode });
@@ -323,8 +342,8 @@ function capture(path: string): void {
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 1440,
-    height: 920,
+    width: Number(process.env.STUDIO_WIN_WIDTH) || 1440,
+    height: Number(process.env.STUDIO_WIN_HEIGHT) || 920,
     minWidth: 1040,
     minHeight: 640,
     title: "AgentConnector",

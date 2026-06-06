@@ -2,7 +2,12 @@
 
 export type Role = "user" | "claude" | "codex" | "system";
 export type MsgKind = "text" | "plan" | "diff" | "review" | "progress" | "error";
+/** Left lane (master/planner) is keyed "claude", right lane (slave/executor) is keyed "codex". */
 export type AgentKind = "claude" | "codex";
+/** The two lane roles, surfaced to the user and used for proxy scoping. */
+export type Lane = "master" | "slave";
+/** Which LLM actually runs in a lane. DeepSeek is master-only (text planning, no file writes). */
+export type Backend = "claude" | "codex" | "deepseek";
 export type Mode = "solo" | "collab";
 
 export interface ChatMessage {
@@ -15,6 +20,8 @@ export interface ChatMessage {
   ts: number;
   /** which conversation this belongs to: claude (left) or codex (right) */
   lane: AgentKind;
+  /** display name of the backend that produced it (e.g. "Claude", "Codex", "DeepSeek") */
+  agentName?: string;
   /** still being produced (shows a thinking/working state) */
   pending?: boolean;
 }
@@ -83,6 +90,8 @@ export interface SearchHit {
 }
 
 export type ProxyMode = "system" | "custom" | "none";
+/** Which lanes the proxy applies to. */
+export type ProxyScope = "master" | "slave" | "both";
 export type ThemeMode = "system" | "light" | "dark";
 
 /** User preferences, persisted to userData/settings.json. */
@@ -91,7 +100,15 @@ export interface AppSettings {
   proxyMode: ProxyMode;
   /** e.g. http://127.0.0.1:7890 — used when proxyMode === "custom" */
   proxyUrl: string;
+  /** master = left only, slave = right only, both = all */
+  proxyScope: ProxyScope;
   theme: ThemeMode;
+  /** LLM running in the left (master/planner) lane */
+  masterBackend: Backend;
+  /** LLM running in the right (slave/executor) lane */
+  slaveBackend: Backend;
+  /** DeepSeek API key (DeepSeek has no CLI login) */
+  deepseekApiKey: string;
 }
 
 /** Payload pushed to the renderer when a saved session is resumed into the live chat. */

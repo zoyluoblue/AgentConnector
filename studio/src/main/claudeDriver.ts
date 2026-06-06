@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { Lane } from "../shared/ipc.js";
 import { log } from "./log.js";
 import { applyProxy, effectiveProxy } from "./settings.js";
 import { resolveBin } from "./which.js";
@@ -14,6 +15,10 @@ export interface ClaudeAsk {
   schema?: unknown;
   /** disable ALL tools so Claude answers directly in one turn (no agentic wandering) */
   disableTools?: boolean;
+  /** executor mode: let Claude edit files (Claude as the slave/coder) */
+  allowWrite?: boolean;
+  /** lane this run belongs to (for proxy scoping) */
+  lane?: Lane;
   signal?: AbortSignal;
   /** live status updates (e.g. "重连中") during retries */
   onStatus?: (s: string) => void;
@@ -34,6 +39,9 @@ const ALL_TOOLS = [
   "Read", "Glob", "Grep", "Task", "Agent",
   "WebFetch", "WebSearch", "TodoWrite",
 ];
+
+// Executor mode (Claude as the slave/coder): allow it to read + edit files non-interactively.
+const WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "Read", "Glob", "Grep", "LS", "TodoWrite"];
 
 // Network blips worth retrying (the "socket connection was closed unexpectedly" class).
 const TRANSIENT =
@@ -94,7 +102,7 @@ function parseEnvelope(out: string, code: number | null, err: string): ClaudeRes
  * and harness vars so it uses the default endpoint + the user's normal login. This fixes
  * "socket connection closed unexpectedly" when a proxy with a short timeout drops long requests.
  */
-function spawnEnv(): NodeJS.ProcessEnv {
+function spawnEnv(lane: Lane): NodeJS.ProcessEnv {
   const e: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined) continue;
@@ -102,13 +110,14 @@ function spawnEnv(): NodeJS.ProcessEnv {
     if (k === "ANTHROPIC_BASE_URL" || k === "ANTHROPIC_API_KEY" || k === "ANTHROPIC_AUTH_TOKEN" || k === "ANTHROPIC_MODEL") continue;
     e[k] = v;
   }
-  return applyProxy(e); // honor the user's proxy setting (system / custom / none)
+  return applyProxy(e, lane); // honor the user's proxy setting + scope for this lane
 }
 
 function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
   return new Promise((resolve) => {
     const bin = resolveBin("claude");
     if (!bin) return resolve({ ok: false, text: "", error: "claude 未找到（PATH）" });
+    const lane: Lane = ask.lane ?? "master";
 
     const argv = ["-p", ask.prompt, "--output-format", "json"];
     if (ask.systemPrompt) argv.push("--append-system-prompt", ask.systemPrompt);
@@ -116,7 +125,9 @@ function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
     if (ask.model) argv.push("--model", ask.model);
     if (ask.sessionId) argv.push("--resume", ask.sessionId);
     argv.push("--add-dir", ask.cwd);
-    if (ask.disableTools) argv.push("--disallowedTools", ...ALL_TOOLS); // variadic — keep LAST
+    // Executor: auto-accept edits + allow write tools (LAST, variadic). Planner: disable all tools (LAST).
+    if (ask.allowWrite) argv.push("--permission-mode", "acceptEdits", "--allowedTools", ...WRITE_TOOLS);
+    else if (ask.disableTools) argv.push("--disallowedTools", ...ALL_TOOLS);
 
     let out = "";
     let err = "";
@@ -127,8 +138,8 @@ function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
       resolve(r);
     };
 
-    log("claude.exec", { model: ask.model || "default", resume: !!ask.sessionId, cwd: ask.cwd, baseUrl: process.env.ANTHROPIC_BASE_URL ? "stripped" : "default" });
-    const child = spawn(bin, argv, { cwd: ask.cwd, stdio: ["ignore", "pipe", "pipe"], env: spawnEnv() });
+    log("claude.exec", { model: ask.model || "default", lane, write: !!ask.allowWrite, resume: !!ask.sessionId, cwd: ask.cwd });
+    const child = spawn(bin, argv, { cwd: ask.cwd, stdio: ["ignore", "pipe", "pipe"], env: spawnEnv(lane) });
     ask.signal?.addEventListener("abort", () => {
       try {
         child.kill("SIGKILL");
@@ -166,7 +177,7 @@ export async function askClaude(ask: ClaudeAsk): Promise<ClaudeResult> {
     const backoff = Math.min(800 * 2 ** attempt, 8000) + Math.floor(Math.random() * 400);
     await delay(backoff, ask.signal);
   }
-  const proxy = effectiveProxy();
+  const proxy = effectiveProxy(ask.lane ?? "master");
   log("claude.retry.exhausted", { tries: MAX_TRIES, proxy: proxy ?? "none", raw: last.error?.slice(0, 200) });
   const hint = proxy
     ? `网络连接被反复中断 —— 多半是本地代理（${proxy}）此刻不稳定。已自动重试 ${MAX_TRIES} 次仍失败，建议切换代理节点/模式后再发一次。`

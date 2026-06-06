@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import type { Lane } from "../shared/ipc.js";
 import { log } from "./log.js";
 import { applyProxy } from "./settings.js";
 import { resolveBin } from "./which.js";
@@ -12,6 +13,8 @@ export interface CodexAsk {
   threadId?: string;
   sandbox?: Sandbox;
   model?: string;
+  /** lane this run belongs to (for proxy scoping) */
+  lane?: Lane;
   signal?: AbortSignal;
   /** partial agent_message text as it streams in */
   onDelta?: (text: string) => void;
@@ -113,7 +116,7 @@ export function askCodex(ask: CodexAsk): Promise<CodexResult> {
     const args = buildArgs(ask);
     log("codex.exec", { argv: args.slice(0, -1), promptLen: ask.prompt.length, cwd: ask.cwd });
     // stdin MUST be ignored: codex reads piped stdin as input and hangs waiting for EOF otherwise.
-    const env = applyProxy({ ...process.env }); // honor the user's proxy setting
+    const env = applyProxy({ ...process.env }, ask.lane ?? "slave"); // honor proxy setting + scope
     const child: ChildProcess = spawn(bin, args, { cwd: ask.cwd, env, stdio: ["ignore", "pipe", "pipe"] });
 
     const onEvent = (ev: Record<string, unknown>) => {
