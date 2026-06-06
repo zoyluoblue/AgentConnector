@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "./i18n";
-import type { ActivityState, AgentKind, AuthState, BusyState, ChatMessage, Mode, ProjectInfo } from "../../shared/ipc";
+import type { ActivityState, AgentKind, AppSettings, AuthState, BusyState, ChatMessage, Mode, ProjectInfo } from "../../shared/ipc";
 import { AgentPanel } from "./components/AgentPanel";
 import { HistoryView } from "./components/HistoryView";
 import { SearchView } from "./components/SearchView";
+import { SettingsView } from "./components/SettingsView";
 import { Sidebar, type View } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
@@ -41,8 +42,9 @@ export function App() {
   const initialHash = useMemo(() => new URLSearchParams(window.location.hash.slice(1)), []);
   const [view, setView] = useState<View>(() => {
     const h = initialHash.get("view");
-    return h === "history" || h === "search" ? h : "chat";
+    return h === "history" || h === "search" || h === "settings" ? h : "chat";
   });
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [focusId, setFocusId] = useState<string | undefined>();
   const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -82,6 +84,7 @@ export function App() {
     void window.studio.getProject().then(setProject);
     void window.studio.getAuth().then(setAuth);
     void window.studio.getMode().then(setMode);
+    void window.studio.getSettings().then(setSettings);
     return () => {
       offEvent();
       offBusy();
@@ -92,6 +95,24 @@ export function App() {
       offSession();
     };
   }, []);
+
+  // Apply the chosen theme to <html>; follow the OS when in "system" mode.
+  useEffect(() => {
+    if (!settings) return;
+    localStorage.setItem("ac-theme", settings.theme);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const dark = settings.theme === "dark" || (settings.theme === "system" && mq.matches);
+      document.documentElement.className = dark ? "dark" : "light";
+    };
+    apply();
+    if (settings.theme !== "system") return;
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [settings]);
+  const changeSettings = async (patch: Partial<AppSettings>) => {
+    setSettings(await window.studio.setSettings(patch));
+  };
 
   const collab = mode === "collab";
   const anyBusy = busy.claude || busy.codex;
@@ -165,7 +186,9 @@ export function App() {
       <Sidebar onNewProject={pick} view={view} onView={setView} />
       <main className="flex-1 min-w-0 flex flex-col">
         <TopBar project={project} mode={mode} onMode={changeMode} onPick={pick} />
-        {view === "history" ? (
+        {view === "settings" ? (
+          <SettingsView settings={settings} onChange={changeSettings} />
+        ) : view === "history" ? (
           <HistoryView />
         ) : view === "search" ? (
           <SearchView

@@ -1,6 +1,6 @@
 import { useLang } from "../i18n";
 
-export type View = "chat" | "history" | "search";
+export type View = "chat" | "history" | "search" | "settings";
 
 interface Props {
   onNewProject: () => void;
@@ -15,7 +15,6 @@ export function Sidebar({ onNewProject, view, onView }: Props) {
     { icon: "search", label: t("search"), view: "search" },
     { icon: "history", label: t("history"), view: "history" },
     { icon: "extension", label: t("extensions") },
-    { icon: "settings", label: t("settings") },
   ];
   return (
     <aside className="w-sidebar_width shrink-0 bg-surface-container/70 backdrop-blur-xl border-r border-outline-variant/30 flex flex-col py-margin_page">
@@ -60,6 +59,18 @@ export function Sidebar({ onNewProject, view, onView }: Props) {
         })}
       </nav>
       <div className="mt-auto px-3 space-y-1">
+        <button
+          type="button"
+          onClick={() => onView("settings")}
+          className={`w-full flex items-center gap-stack_sm px-stack_md py-stack_sm rounded-lg transition-colors ${
+            view === "settings"
+              ? "bg-primary-container/10 text-primary font-semibold"
+              : "text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50"
+          }`}
+        >
+          <span className="material-symbols-outlined">settings</span>
+          <span className="font-body-lg">{t("settings")}</span>
+        </button>
         {[
           ["help_outline", t("help")],
           ["chat_bubble_outline", t("feedback")],

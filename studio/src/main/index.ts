@@ -21,6 +21,7 @@ import { askCodex } from "./codexDriver.js";
 import { changesSince, snapshot } from "./diff.js";
 import { fixPath } from "./fixPath.js";
 import { log, setLogFile, setLogSink } from "./log.js";
+import { getSettings, initSettings, updateSettings } from "./settings.js";
 import * as store from "./store.js";
 
 // GUI apps don't inherit the shell PATH — repair it so claude/codex/git resolve.
@@ -375,6 +376,7 @@ app.whenReady().then(() => {
   setLogFile(join(app.getPath("userData"), "logs", "agentconnector.log"));
   setLogSink((line) => send(CH.logLine, line));
   store.initStore(join(app.getPath("userData"), "history"));
+  initSettings(join(app.getPath("userData"), "settings.json"));
   log("app.ready", { mode, userData: app.getPath("userData") });
 
   ipcMain.handle(CH.send, (_e, p: { text: string; target: AgentKind }) => handleSend(p.text, p.target));
@@ -420,6 +422,10 @@ app.whenReady().then(() => {
   ipcMain.handle(CH.historyDelete, (_e, id: string) => store.remove(id));
   ipcMain.handle(CH.historyRename, (_e, p: { id: string; title: string }) => store.rename(p.id, p.title));
   ipcMain.handle(CH.searchQuery, (_e, q: string) => store.search(q));
+
+  // ---- settings ----
+  ipcMain.handle(CH.settingsGet, () => getSettings());
+  ipcMain.handle(CH.settingsSet, (_e, patch) => updateSettings(patch));
 
   createWindow();
   app.on("activate", () => {

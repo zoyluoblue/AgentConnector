@@ -2,6 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== color tokens (R G B triplets) — light is the default on :root ===== */
+:root {
+  --c-secondary-fixed: 226 223 255;
+  --c-primary-fixed: 218 225 255;
+  --c-on-error: 255 255 255;
+  --c-on-tertiary-fixed: 57 12 0;
+  --c-primary-fixed-dim: 179 197 255;
+  --c-primary-container: 0 102 255;
+  --c-surface-tint: 0 84 214;
+  --c-on-error-container: 147 0 10;
+  --c-on-background: 27 27 28;
+  --c-tertiary-fixed: 255 219 208;
+  --c-secondary: 76 74 202;
+  --c-background: 252 249 248;
+  --c-secondary-container: 102 100 228;
+  --c-on-primary: 255 255 255;
+  --c-on-tertiary-fixed-variant: 131 38 0;
+  --c-tertiary: 163 50 0;
+  --c-on-primary-fixed: 0 24 73;
+  --c-inverse-surface: 48 48 48;
+  --c-surface-container-high: 234 231 231;
+  --c-primary: 0 80 203;
+  --c-surface-dim: 220 217 217;
+  --c-surface-container-highest: 229 226 225;
+  --c-surface-bright: 252 249 248;
+  --c-on-secondary-fixed: 12 0 106;
+  --c-on-primary-fixed-variant: 0 63 164;
+  --c-surface: 252 249 248;
+  --c-on-secondary-fixed-variant: 54 49 180;
+  --c-inverse-on-surface: 243 240 239;
+  --c-surface-container-low: 246 243 242;
+  --c-on-secondary: 255 255 255;
+  --c-outline: 114 118 135;
+  --c-on-tertiary: 255 255 255;
+  --c-on-secondary-container: 255 251 255;
+  --c-error: 186 26 26;
+  --c-surface-container-lowest: 255 255 255;
+  --c-on-surface-variant: 66 70 86;
+  --c-on-primary-container: 248 247 255;
+  --c-outline-variant: 194 198 216;
+  --c-error-container: 255 218 214;
+  --c-on-tertiary-container: 255 246 244;
+  --c-secondary-fixed-dim: 194 193 255;
+  --c-tertiary-fixed-dim: 255 181 157;
+  --c-surface-container: 240 237 237;
+  --c-on-surface: 27 27 28;
+  --c-tertiary-container: 204 66 4;
+  --c-surface-variant: 229 226 225;
+  --c-inverse-primary: 179 197 255;
+  --c-claude: 88 86 214;
+  --shadow-strength: 0.08;
+}
+
+/* ===== dark overrides (fixed/* tokens intentionally inherit the light values) ===== */
+.dark {
+  --c-on-error: 105 0 5;
+  --c-primary-container: 0 102 255;
+  --c-surface-tint: 74 124 255;
+  --c-on-error-container: 255 218 214;
+  --c-on-background: 228 226 230;
+  --c-secondary: 120 118 230;
+  --c-background: 18 19 22;
+  --c-secondary-container: 102 100 228;
+  --c-tertiary: 255 181 157;
+  --c-inverse-surface: 228 226 230;
+  --c-surface-container-high: 45 46 50;
+  --c-primary: 74 124 255;
+  --c-surface-dim: 18 19 22;
+  --c-surface-container-highest: 56 57 61;
+  --c-surface-bright: 56 57 61;
+  --c-surface: 28 29 33;
+  --c-inverse-on-surface: 48 48 48;
+  --c-surface-container-low: 30 31 35;
+  --c-outline: 142 145 158;
+  --c-error: 255 180 171;
+  --c-surface-container-lowest: 12 13 16;
+  --c-on-surface-variant: 197 198 208;
+  --c-on-primary-container: 248 247 255;
+  --c-outline-variant: 67 70 78;
+  --c-error-container: 147 0 10;
+  --c-surface-container: 35 36 40;
+  --c-on-surface: 228 226 230;
+  --c-tertiary-container: 204 66 4;
+  --c-surface-variant: 67 70 78;
+  --c-inverse-primary: 0 80 203;
+  --c-claude: 124 122 240;
+  --shadow-strength: 0.4;
+}
+
 @layer base {
   html,
   body,
@@ -21,10 +110,10 @@
   user-select: none;
 }
 .mac-shadow {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, var(--shadow-strength));
 }
 .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgb(var(--c-surface) / 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
@@ -36,7 +125,7 @@
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
+  background: rgb(var(--c-on-surface) / 0.18);
   border-radius: 8px;
   border: 3px solid transparent;
   background-clip: content-box;

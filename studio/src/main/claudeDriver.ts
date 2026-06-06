@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { log } from "./log.js";
+import { applyProxy, effectiveProxy } from "./settings.js";
 import { resolveBin } from "./which.js";
 
 export interface ClaudeAsk {
@@ -101,7 +102,7 @@ function spawnEnv(): NodeJS.ProcessEnv {
     if (k === "ANTHROPIC_BASE_URL" || k === "ANTHROPIC_API_KEY" || k === "ANTHROPIC_AUTH_TOKEN" || k === "ANTHROPIC_MODEL") continue;
     e[k] = v;
   }
-  return e;
+  return applyProxy(e); // honor the user's proxy setting (system / custom / none)
 }
 
 function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
@@ -145,12 +146,6 @@ function askClaudeOnce(ask: ClaudeAsk): Promise<ClaudeResult> {
 
 const MAX_TRIES = 5;
 
-/** Local proxy in effect (host:port), if any — these flake and cause "socket closed". */
-function proxyInUse(): string | null {
-  const p = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
-  return p ? p.replace(/^https?:\/\//, "").replace(/\/$/, "") : null;
-}
-
 /**
  * Run `claude -p`, retrying transient network errors (socket closed, timeouts).
  * On a proxied network the proxy node intermittently drops connections, so we use
@@ -171,7 +166,7 @@ export async function askClaude(ask: ClaudeAsk): Promise<ClaudeResult> {
     const backoff = Math.min(800 * 2 ** attempt, 8000) + Math.floor(Math.random() * 400);
     await delay(backoff, ask.signal);
   }
-  const proxy = proxyInUse();
+  const proxy = effectiveProxy();
   log("claude.retry.exhausted", { tries: MAX_TRIES, proxy: proxy ?? "none", raw: last.error?.slice(0, 200) });
   const hint = proxy
     ? `网络连接被反复中断 —— 多半是本地代理（${proxy}）此刻不稳定。已自动重试 ${MAX_TRIES} 次仍失败，建议切换代理节点/模式后再发一次。`

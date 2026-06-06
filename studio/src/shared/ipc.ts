@@ -82,6 +82,18 @@ export interface SearchHit {
   snippet: string;
 }
 
+export type ProxyMode = "system" | "custom" | "none";
+export type ThemeMode = "system" | "light" | "dark";
+
+/** User preferences, persisted to userData/settings.json. */
+export interface AppSettings {
+  /** system = inherit env proxy; custom = use proxyUrl; none = no proxy */
+  proxyMode: ProxyMode;
+  /** e.g. http://127.0.0.1:7890 — used when proxyMode === "custom" */
+  proxyUrl: string;
+  theme: ThemeMode;
+}
+
 /** Payload pushed to the renderer when a saved session is resumed into the live chat. */
 export interface SessionLoad {
   project: ProjectInfo;
@@ -117,6 +129,8 @@ export const CH = {
   historyRename: "history:rename",
   searchQuery: "search:query",
   sessionLoad: "session:load",
+  settingsGet: "settings:get",
+  settingsSet: "settings:set",
 } as const;
 
 /** The surface exposed to the renderer as `window.studio`. */
@@ -155,4 +169,8 @@ export interface StudioApi {
   /** Full-text search across every saved conversation. */
   search(query: string): Promise<SearchHit[]>;
   onSessionLoad(cb: (p: SessionLoad) => void): () => void;
+  // ---- settings ----
+  getSettings(): Promise<AppSettings>;
+  /** Merge a partial update, persist, and return the full settings. */
+  setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
 }

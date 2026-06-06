@@ -81,6 +81,27 @@ const STR = {
   grpEarlier: { zh: "更早", en: "Earlier" },
   resultsUnit: { zh: "条结果", en: "results" },
   roleYou: { zh: "你", en: "You" },
+  // ---- settings ----
+  settingsTitle: { zh: "设置", en: "Settings" },
+  settingsSub: { zh: "偏好会自动保存在本机。", en: "Preferences are saved locally on this machine." },
+  secAppearance: { zh: "外观", en: "Appearance" },
+  secAppearanceSub: { zh: "界面配色。", en: "Interface color scheme." },
+  themeSystem: { zh: "跟随系统", en: "System" },
+  themeLight: { zh: "浅色", en: "Light" },
+  themeDark: { zh: "深色", en: "Dark" },
+  secProxy: { zh: "代理", en: "Proxy" },
+  secProxySub: {
+    zh: "设置后，Claude 与 Codex 的所有请求都会走此代理。",
+    en: "Once set, all Claude and Codex requests go through this proxy.",
+  },
+  proxySystem: { zh: "跟随系统", en: "System" },
+  proxySystemHint: { zh: "使用系统/终端已设置的代理环境变量。", en: "Use the proxy env vars already set by the OS/shell." },
+  proxyCustom: { zh: "自定义", en: "Custom" },
+  proxyCustomHint: { zh: "手动指定代理地址（HTTP/HTTPS）。", en: "Specify a proxy address (HTTP/HTTPS)." },
+  proxyNone: { zh: "不使用", en: "None" },
+  proxyNoneHint: { zh: "直连，不走任何代理。", en: "Direct connection, no proxy." },
+  proxyUrlLabel: { zh: "代理地址", en: "Proxy URL" },
+  proxyApplyNote: { zh: "更改下一次请求即生效，无需重启。", en: "Applies on the next request — no restart needed." },
 } as const;
 
 type Key = keyof typeof STR;

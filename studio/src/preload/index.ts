@@ -74,6 +74,8 @@ const api: StudioApi = {
     ipcRenderer.on(CH.sessionLoad, h);
     return () => ipcRenderer.off(CH.sessionLoad, h);
   },
+  getSettings: () => ipcRenderer.invoke(CH.settingsGet),
+  setSettings: (patch) => ipcRenderer.invoke(CH.settingsSet, patch),
 };
 
 contextBridge.exposeInMainWorld("studio", api);
