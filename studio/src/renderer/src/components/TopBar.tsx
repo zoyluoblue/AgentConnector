@@ -1,3 +1,4 @@
+import { useLang } from "../i18n";
 import type { Mode, ProjectInfo } from "../../../shared/ipc";
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function TopBar({ project, mode, onMode, onPick }: Props) {
+  const { lang, t, toggle } = useLang();
   return (
     <header className="h-16 shrink-0 bg-surface/80 backdrop-blur-md border-b border-outline-variant/20 shadow-sm flex justify-between items-center px-margin_page">
       <div className="flex items-center gap-stack_lg">
@@ -16,7 +18,7 @@ export function TopBar({ project, mode, onMode, onPick }: Props) {
             folder
           </span>
           <span className="block w-full bg-surface-container-low rounded-lg pl-10 pr-3 py-1.5 text-body-sm text-on-surface-variant truncate group-hover:ring-1 group-hover:ring-primary/30 transition-all">
-            {project.name ?? "选择项目…"}
+            {project.name ?? t("selectProject")}
           </span>
         </button>
         <nav className="flex items-center gap-6 h-full">
@@ -29,7 +31,7 @@ export function TopBar({ project, mode, onMode, onPick }: Props) {
                 : "text-on-surface-variant font-medium hover:text-primary transition-colors text-body-lg"
             }
           >
-            单点模式
+            {t("soloMode")}
           </button>
           <button
             type="button"
@@ -40,12 +42,19 @@ export function TopBar({ project, mode, onMode, onPick }: Props) {
                 : "text-on-surface-variant font-medium hover:text-primary transition-colors text-body-lg"
             }
           >
-            双向模式
+            {t("dualMode")}
           </button>
         </nav>
       </div>
-      <button type="button" className="text-on-surface-variant font-medium hover:text-primary transition-colors text-body-sm">
-        中文/EN
+      <button
+        type="button"
+        onClick={toggle}
+        title="切换语言 / Toggle language"
+        className="flex items-center gap-1 text-body-sm font-medium"
+      >
+        <span className={lang === "zh" ? "text-primary font-bold" : "text-on-surface-variant"}>中文</span>
+        <span className="text-on-surface-variant/40">/</span>
+        <span className={lang === "en" ? "text-primary font-bold" : "text-on-surface-variant"}>EN</span>
       </button>
     </header>
   );

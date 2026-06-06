@@ -1,0 +1,75 @@
+import { type ReactNode, createContext, useContext, useState } from "react";
+
+export type Lang = "zh" | "en";
+
+const STR = {
+  newProject: { zh: "新建项目", en: "New Project" },
+  search: { zh: "搜索", en: "Search" },
+  history: { zh: "历史", en: "History" },
+  extensions: { zh: "扩展", en: "Extensions" },
+  settings: { zh: "设置", en: "Settings" },
+  help: { zh: "帮助", en: "Help" },
+  feedback: { zh: "反馈", en: "Feedback" },
+  selectProject: { zh: "选择项目…", en: "Select project…" },
+  soloMode: { zh: "单点模式", en: "Single Mode" },
+  dualMode: { zh: "双向模式", en: "Dual Mode" },
+  planReview: { zh: "规划 · 审查", en: "Plan · Review" },
+  codeExec: { zh: "写码 · 执行", en: "Code · Execute" },
+  connect: { zh: "连接", en: "Connect" },
+  connecting: { zh: "连接中…", en: "Connecting…" },
+  connected: { zh: "已连接", en: "Connected" },
+  modelDefault: { zh: "默认", en: "Default" },
+  you: { zh: "你", en: "You" },
+  system: { zh: "系统", en: "System" },
+  thinking: { zh: "思考中", en: "Thinking" },
+  executing: { zh: "执行中…", en: "Executing…" },
+  livePreview: { zh: "Live Preview", en: "Live Preview" },
+  noPreview: { zh: "暂无可预览的页面", en: "Nothing to preview yet" },
+  noPreviewSub: {
+    zh: "当项目里出现 index.html（例如 Codex 生成网页后），这里会自动显示运行效果。",
+    en: "When an index.html appears (e.g. after Codex builds a page), it renders here.",
+  },
+  interjectHint: { zh: "运行中 · 可随时输入「插话」给当前任务追加指令", en: "Running · type anytime to add a follow-up instruction" },
+  selectFolderTitle: { zh: "先选一个项目文件夹", en: "Pick a project folder first" },
+  selectFolderSub: { zh: "点顶部「选择项目」。选好后即可开始。", en: "Click “Select project” at the top to begin." },
+  claudeTitleSolo: { zh: "说说你想做什么", en: "Tell Claude what you want" },
+  claudeTitleCollab: { zh: "描述你想做的东西", en: "Describe what you want to build" },
+  claudeSubSolo: {
+    zh: "Claude 负责规划/审查，Codex 负责写码。切到「双向」可让两者自动协作。",
+    en: "Claude plans/reviews; Codex writes code. Switch to Dual Mode for auto collaboration.",
+  },
+  claudeSubCollab: {
+    zh: "回车后 Claude 规划 → Codex 自动执行 → Claude 审查，全程自动。",
+    en: "On Enter: Claude plans → Codex executes → Claude reviews — fully automatic.",
+  },
+  codexTitle: { zh: "直接和 Codex 对话", en: "Chat directly with Codex" },
+  codexSub: { zh: "让 Codex 帮你写代码、改文件。", en: "Ask Codex to write code or edit files." },
+  phPickFolder: { zh: "先选项目文件夹…", en: "Select a project folder first…" },
+  phConnectClaude: { zh: "请先连接 Claude…", en: "Connect Claude first…" },
+  phConnectCodex: { zh: "请先连接 Codex…", en: "Connect Codex first…" },
+  phConnectBoth: { zh: "请先连接 Claude 和 Codex…", en: "Connect Claude and Codex first…" },
+  phCollab: { zh: "描述你想做的，回车后 Claude 与 Codex 自动协作…", en: "Describe your goal; press Enter for auto collaboration…" },
+  phClaude: { zh: "和 Claude 聊聊你想做什么…（Enter 发送）", en: "Tell Claude what you want… (Enter to send)" },
+  phCodex: { zh: "让 Codex 帮你写代码、改文件…（Enter 发送）", en: "Ask Codex to code or edit files… (Enter to send)" },
+} as const;
+
+type Key = keyof typeof STR;
+
+interface Ctx {
+  lang: Lang;
+  t: (k: Key) => string;
+  toggle: () => void;
+}
+const LangContext = createContext<Ctx>({ lang: "zh", t: (k) => STR[k].zh, toggle: () => {} });
+
+export function LangProvider({ children }: { children: ReactNode }) {
+  const [lang, setLang] = useState<Lang>("zh");
+  const t = (k: Key) => STR[k][lang];
+  return (
+    <LangContext.Provider value={{ lang, t, toggle: () => setLang((l) => (l === "zh" ? "en" : "zh")) }}>
+      {children}
+    </LangContext.Provider>
+  );
+}
+
+export const useLang = () => useContext(LangContext);

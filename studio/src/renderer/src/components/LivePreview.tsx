@@ -1,6 +1,8 @@
 import { createElement, useEffect, useState } from "react";
+import { useLang } from "../i18n";
 
 export function LivePreview() {
+  const { t } = useLang();
   const [url, setUrl] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -25,7 +27,7 @@ export function LivePreview() {
       <div className="h-10 shrink-0 border-b border-outline-variant/20 flex items-center justify-between px-4 bg-surface-container-low">
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-[16px] text-on-surface-variant">language</span>
-          <span className="text-body-sm font-medium">Live Preview</span>
+          <span className="text-body-sm font-medium">{t("livePreview")}</span>
         </div>
         <div className="flex items-center gap-3">
           <button type="button" onClick={refresh} title="刷新" className="flex">
@@ -38,10 +40,8 @@ export function LivePreview() {
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-slate-50">
           <span className="material-symbols-outlined text-[40px] text-on-surface-variant/40 mb-3">desktop_windows</span>
-          <p className="text-body-lg font-semibold text-on-surface-variant">暂无可预览的页面</p>
-          <p className="text-body-sm text-on-surface-variant/70 mt-1 max-w-[260px]">
-            当项目里出现 index.html（例如 Codex 生成网页后），这里会自动显示运行效果。
-          </p>
+          <p className="text-body-lg font-semibold text-on-surface-variant">{t("noPreview")}</p>
+          <p className="text-body-sm text-on-surface-variant/70 mt-1 max-w-[260px]">{t("noPreviewSub")}</p>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { useLang } from "../i18n";
 
 interface Props {
   busy: boolean;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function Composer({ busy, disabled, placeholder, onSend, onStop, extra }: Props) {
+  const { t } = useLang();
   const [text, setText] = useState("");
   const [composing, setComposing] = useState(false);
 
@@ -67,7 +69,7 @@ export function Composer({ busy, disabled, placeholder, onSend, onStop, extra }:
           <span className="material-symbols-outlined text-[20px]">arrow_upward</span>
         </button>
       </div>
-      {busy && <p className="text-body-sm text-on-surface-variant mt-2 px-1">运行中 · 可随时输入「插话」给当前任务追加指令</p>}
+      {busy && <p className="text-body-sm text-on-surface-variant mt-2 px-1">{t("interjectHint")}</p>}
     </div>
   );
 }

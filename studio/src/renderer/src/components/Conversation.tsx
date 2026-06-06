@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useLang } from "../i18n";
 import type { ChatMessage } from "../../../shared/ipc";
 
 function Thinking() {
@@ -12,6 +13,7 @@ function Thinking() {
 }
 
 function ClaudeCard({ m }: { m: ChatMessage }) {
+  const { t } = useLang();
   return (
     <div className="bg-claude/5 border border-claude/20 rounded-xl p-stack_md mac-shadow">
       <div className="flex items-center gap-stack_sm mb-stack_sm">
@@ -22,7 +24,9 @@ function ClaudeCard({ m }: { m: ChatMessage }) {
         </div>
         <div className="leading-tight">
           <h3 className="font-headline text-body-lg font-bold text-claude">Claude</h3>
-          <p className="text-label-caps text-claude/60">#{m.n} · 规划 / 审查</p>
+          <p className="text-label-caps text-claude/60">
+            #{m.n} · {t("planReview")}
+          </p>
         </div>
       </div>
       <div className="text-body-lg text-on-surface whitespace-pre-wrap">{m.text || (m.pending ? <Thinking /> : "")}</div>
@@ -31,6 +35,7 @@ function ClaudeCard({ m }: { m: ChatMessage }) {
 }
 
 function CodexCard({ m }: { m: ChatMessage }) {
+  const { t } = useLang();
   return (
     <div className="bg-surface rounded-xl border border-outline-variant/30 overflow-hidden mac-shadow">
       <div className="flex items-center justify-between px-stack_md py-2 bg-surface-container">
@@ -42,12 +47,10 @@ function CodexCard({ m }: { m: ChatMessage }) {
           </div>
           <span className="text-body-sm font-code font-medium">Codex · #{m.n}</span>
         </div>
-        {m.pending && (
-          <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">EXECUTING</span>
-        )}
+        {m.pending && <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">EXECUTING</span>}
       </div>
       <div className="p-4 bg-[#0d1117] text-[#c9d1d9] font-code text-[13px] leading-relaxed whitespace-pre-wrap break-words">
-        {m.text || (m.pending ? <span className="text-[#8b949e]">执行中…</span> : "")}
+        {m.text || (m.pending ? <span className="text-[#8b949e]">{t("executing")}</span> : "")}
       </div>
     </div>
   );
@@ -85,6 +88,7 @@ interface Props {
 }
 
 export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Props) {
+  const { t } = useLang();
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -95,8 +99,8 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub }: Pro
       <div className="flex-1 min-h-0 flex items-center justify-center p-8">
         <div className="text-center max-w-[340px]">
           <span className="material-symbols-outlined text-[40px] text-primary/30 mb-3">{hasProject ? "auto_awesome" : "folder_open"}</span>
-          <p className="font-headline text-headline text-on-surface mb-1.5">{hasProject ? emptyTitle : "先选一个项目文件夹"}</p>
-          <p className="text-body-sm text-on-surface-variant leading-relaxed">{hasProject ? emptySub : "点顶部「选择项目」。选好后即可开始。"}</p>
+          <p className="font-headline text-headline text-on-surface mb-1.5">{hasProject ? emptyTitle : t("selectFolderTitle")}</p>
+          <p className="text-body-sm text-on-surface-variant leading-relaxed">{hasProject ? emptySub : t("selectFolderSub")}</p>
         </div>
       </div>
     );

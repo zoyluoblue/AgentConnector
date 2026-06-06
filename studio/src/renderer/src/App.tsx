@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLang } from "./i18n";
 import type { AgentKind, AuthState, BusyState, ChatMessage, Mode, ProjectInfo } from "../../shared/ipc";
 import { AgentPanelHeader } from "./components/AgentPanelHeader";
 import { Composer } from "./components/Composer";
@@ -27,7 +28,10 @@ const CODEX_MODELS = [
   { v: "gpt-5.3-codex-spark", label: "GPT-5.3-Codex-Spark" },
 ];
 
+const PANEL_CARD = "flex-1 min-h-0 flex flex-col bg-surface rounded-xl border border-outline-variant/30 overflow-hidden mac-shadow";
+
 export function App() {
+  const { t } = useLang();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState<BusyState>({ claude: false, codex: false });
   const [project, setProject] = useState<ProjectInfo>({ cwd: null, name: null });
@@ -35,7 +39,6 @@ export function App() {
   const [mode, setMode] = useState<Mode>("solo");
   const [connecting, setConnecting] = useState<Record<AgentKind, boolean>>({ claude: false, codex: false });
   const [models, setModels] = useState<Record<AgentKind, string>>({ claude: "", codex: "" });
-  const [soloTarget, setSoloTarget] = useState<AgentKind>("claude");
 
   useEffect(() => {
     const offEvent = window.studio.onEvent((m) => {
@@ -68,6 +71,8 @@ export function App() {
 
   const collab = mode === "collab";
   const anyBusy = busy.claude || busy.codex;
+  const claudeMsgs = useMemo(() => messages.filter((m) => m.lane === "claude"), [messages]);
+  const codexMsgs = useMemo(() => messages.filter((m) => m.lane === "codex"), [messages]);
 
   const connect = async (kind: AgentKind) => {
     setConnecting((c) => ({ ...c, [kind]: true }));
@@ -91,7 +96,7 @@ export function App() {
   const headerProps = (kind: AgentKind) => ({
     kind,
     name: kind === "claude" ? "Claude" : "Codex",
-    role: kind === "claude" ? "规划 · 审查" : "写码 · 执行",
+    role: t(kind === "claude" ? "planReview" : "codeExec"),
     status: auth[kind],
     connecting: connecting[kind],
     onConnect: () => void connect(kind),
@@ -100,39 +105,22 @@ export function App() {
     onModel: (v: string) => changeModel(kind, v),
   });
 
-  const target: AgentKind = collab ? "claude" : soloTarget;
-  const disabled =
-    !project.cwd || (collab ? !auth.claude.connected || !auth.codex.connected : !auth[soloTarget].connected);
-  const composerBusy = collab ? anyBusy : busy[soloTarget];
-  const placeholder = !project.cwd
-    ? "先选项目文件夹…"
-    : disabled
+  // left composer (Claude / orchestration)
+  const leftDisabled = !project.cwd || !auth.claude.connected || (collab && !auth.codex.connected);
+  const leftBusy = collab ? anyBusy : busy.claude;
+  const leftPh = !project.cwd
+    ? t("phPickFolder")
+    : leftDisabled
       ? collab
-        ? "请先连接 Claude 和 Codex…"
-        : `请先连接 ${soloTarget === "claude" ? "Claude" : "Codex"}…`
+        ? t("phConnectBoth")
+        : t("phConnectClaude")
       : collab
-        ? "描述你想做的，回车后 Claude 与 Codex 自动协作…"
-        : soloTarget === "claude"
-          ? "和 Claude 聊聊你想做什么…（Enter 发送）"
-          : "让 Codex 帮你写代码、改文件…（Enter 发送）";
+        ? t("phCollab")
+        : t("phClaude");
 
-  const soloToggle = collab ? null : (
-    <div className="flex items-center gap-1.5 mb-2">
-      <span className="text-body-sm text-on-surface-variant mr-1">发送给</span>
-      {(["claude", "codex"] as AgentKind[]).map((k) => (
-        <button
-          type="button"
-          key={k}
-          onClick={() => setSoloTarget(k)}
-          className={`px-2.5 py-0.5 rounded-full text-body-sm font-medium transition-colors ${
-            soloTarget === k ? "bg-primary text-white" : "bg-surface-container text-on-surface-variant hover:text-on-surface"
-          }`}
-        >
-          {k === "claude" ? "Claude" : "Codex"}
-        </button>
-      ))}
-    </div>
-  );
+  // right composer (Codex chat — solo only)
+  const codexDisabled = !project.cwd || !auth.codex.connected;
+  const codexPh = !project.cwd ? t("phPickFolder") : !auth.codex.connected ? t("phConnectCodex") : t("phCodex");
 
   return (
     <div className="h-screen flex bg-background text-on-surface overflow-hidden">
@@ -140,31 +128,50 @@ export function App() {
       <main className="flex-1 min-w-0 flex flex-col">
         <TopBar project={project} mode={mode} onMode={changeMode} onPick={pick} />
         <div className="flex-1 min-h-0 flex p-gutter gap-gutter bg-surface-container-lowest">
-          <section className="w-1/2 min-w-0 flex flex-col bg-surface rounded-xl border border-outline-variant/30 overflow-hidden mac-shadow">
+          {/* Claude column */}
+          <div className="w-1/2 min-w-0 flex flex-col gap-gutter min-h-0">
             <AgentPanelHeader {...headerProps("claude")} />
-            <Conversation
-              messages={messages}
-              hasProject={!!project.cwd}
-              emptyTitle={collab ? "描述你想做的东西" : "说说你想做什么"}
-              emptySub={
-                collab
-                  ? "回车后 Claude 规划 → Codex 自动执行 → Claude 审查，全程自动。"
-                  : "Claude 负责规划/审查，Codex 负责写码。切到「双向」可让两者自动协作。"
-              }
-            />
-            <Composer
-              busy={composerBusy}
-              disabled={disabled}
-              placeholder={placeholder}
-              onSend={(t) => void window.studio.send(t, target)}
-              onStop={() => window.studio.abort(target)}
-              extra={soloToggle}
-            />
-          </section>
-          <section className="w-1/2 min-w-0 flex flex-col bg-surface rounded-xl border border-outline-variant/30 overflow-hidden mac-shadow">
+            <div className={PANEL_CARD}>
+              <Conversation
+                messages={collab ? messages : claudeMsgs}
+                hasProject={!!project.cwd}
+                emptyTitle={collab ? t("claudeTitleCollab") : t("claudeTitleSolo")}
+                emptySub={collab ? t("claudeSubCollab") : t("claudeSubSolo")}
+              />
+              <Composer
+                busy={leftBusy}
+                disabled={leftDisabled}
+                placeholder={leftPh}
+                onSend={(x) => void window.studio.send(x, "claude")}
+                onStop={() => window.studio.abort("claude")}
+              />
+            </div>
+          </div>
+          {/* Codex column */}
+          <div className="w-1/2 min-w-0 flex flex-col gap-gutter min-h-0">
             <AgentPanelHeader {...headerProps("codex")} />
-            <LivePreview />
-          </section>
+            <div className={PANEL_CARD}>
+              {collab ? (
+                <LivePreview />
+              ) : (
+                <>
+                  <Conversation
+                    messages={codexMsgs}
+                    hasProject={!!project.cwd}
+                    emptyTitle={t("codexTitle")}
+                    emptySub={t("codexSub")}
+                  />
+                  <Composer
+                    busy={busy.codex}
+                    disabled={codexDisabled}
+                    placeholder={codexPh}
+                    onSend={(x) => void window.studio.send(x, "codex")}
+                    onStop={() => window.studio.abort("codex")}
+                  />
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     </div>
