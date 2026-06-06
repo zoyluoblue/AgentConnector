@@ -16,21 +16,34 @@ function NLabel({ n, side }: { n: number; side: "start" | "end" }) {
   return <span className={`text-[11px] font-bold text-on-surface-variant/45 ${side === "end" ? "pr-1" : "pl-1"}`}>#{n}</span>;
 }
 
+/** Visual identity for whichever backend produced the message. */
+function agentVisual(name?: string): { icon: string; color: string; label: string } {
+  if (name === "DeepSeek") return { icon: "neurology", color: "#4D6BFE", label: "DeepSeek" };
+  if (name === "Codex") return { icon: "code", color: "#0050cb", label: "Codex" };
+  return { icon: "psychology", color: "#5856D6", label: name || "Claude" };
+}
+
+// Master/left lane card — accent follows the running backend.
 function ClaudeCard({ m }: { m: ChatMessage }) {
   const { t } = useLang();
+  const v = agentVisual(m.agentName);
   return (
     <div className="flex flex-col items-start gap-1">
       <NLabel n={m.n} side="start" />
-      <div className="w-full bg-claude/5 border border-claude/20 rounded-xl p-stack_md mac-shadow">
+      <div className="w-full rounded-xl p-stack_md mac-shadow border" style={{ background: `${v.color}0d`, borderColor: `${v.color}33` }}>
         <div className="flex items-center gap-stack_sm mb-stack_sm">
-          <div className="w-8 h-8 rounded-full bg-claude flex items-center justify-center text-white">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ background: v.color }}>
             <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-              psychology
+              {v.icon}
             </span>
           </div>
           <div className="leading-tight">
-            <h3 className="font-headline text-body-lg font-bold text-claude">Claude</h3>
-            <p className="text-label-caps text-claude/60">{t("planReview")}</p>
+            <h3 className="font-headline text-body-lg font-bold" style={{ color: v.color }}>
+              {v.label}
+            </h3>
+            <p className="text-label-caps" style={{ color: `${v.color}99` }}>
+              {t("planReview")}
+            </p>
           </div>
         </div>
         <div className="text-body-lg text-on-surface whitespace-pre-wrap">{m.text || (m.pending ? <Thinking /> : "")}</div>
@@ -39,20 +52,22 @@ function ClaudeCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// Slave/right lane card — terminal-style executor output.
 function CodexCard({ m }: { m: ChatMessage }) {
   const { t } = useLang();
+  const v = agentVisual(m.agentName);
   return (
     <div className="flex flex-col items-start gap-1">
       <NLabel n={m.n} side="start" />
       <div className="w-full bg-surface rounded-xl border border-outline-variant/30 overflow-hidden mac-shadow">
         <div className="flex items-center justify-between px-stack_md py-2 bg-surface-container">
           <div className="flex items-center gap-stack_sm">
-            <div className="w-6 h-6 rounded bg-on-surface flex items-center justify-center text-surface">
+            <div className="w-6 h-6 rounded flex items-center justify-center text-white" style={{ background: v.color }}>
               <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                code
+                {v.icon}
               </span>
             </div>
-            <span className="text-body-sm font-code font-medium">Codex</span>
+            <span className="text-body-sm font-code font-medium">{v.label === "Claude" ? m.agentName || "Codex" : v.label}</span>
           </div>
           {m.pending && <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">EXECUTING</span>}
         </div>
@@ -96,9 +111,11 @@ interface Props {
   emptySub: string;
   /** scroll to + briefly highlight this message (e.g. a search hit) */
   focusId?: string;
+  /** live action of this lane ("" = idle) — shown transiently, NOT saved to history */
+  activity?: string;
 }
 
-export function Conversation({ messages, hasProject, emptyTitle, emptySub, focusId }: Props) {
+export function Conversation({ messages, hasProject, emptyTitle, emptySub, focusId, activity }: Props) {
   const { t } = useLang();
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -113,7 +130,7 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub, focus
       return () => clearTimeout(timer);
     }
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, focusId]);
+  }, [messages, focusId, activity]);
 
   if (!hasProject || messages.length === 0) {
     return (
@@ -148,6 +165,12 @@ export function Conversation({ messages, hasProject, emptyTitle, emptySub, focus
           )}
         </div>
       ))}
+      {activity && (
+        <div className="self-start max-w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-container/70 text-body-sm text-on-surface-variant">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+          <span className="truncate font-code">{activity}</span>
+        </div>
+      )}
       <div ref={endRef} />
     </div>
   );

@@ -22,9 +22,10 @@ interface Props {
   emptySub: string;
   composer?: ComposerProps;
   focusId?: string;
+  activity?: string;
 }
 
-export function AgentPanel({ header, messages, hasProject, emptyTitle, emptySub, composer, focusId }: Props) {
+export function AgentPanel({ header, messages, hasProject, emptyTitle, emptySub, composer, focusId, activity }: Props) {
   const { t } = useLang();
   const [tab, setTab] = useState<"chat" | "preview">("chat");
 
@@ -51,7 +52,7 @@ export function AgentPanel({ header, messages, hasProject, emptyTitle, emptySub,
             <LivePreview />
           ) : (
             <>
-              <Conversation messages={messages} hasProject={hasProject} emptyTitle={emptyTitle} emptySub={emptySub} focusId={focusId} />
+              <Conversation messages={messages} hasProject={hasProject} emptyTitle={emptyTitle} emptySub={emptySub} focusId={focusId} activity={activity} />
               {composer && <Composer {...composer} />}
             </>
           )}

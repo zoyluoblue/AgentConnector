@@ -49,12 +49,12 @@ const STR = {
   codexTitleCollab: { zh: "Codex 执行区", en: "Codex execution" },
   codexSubCollab: { zh: "Claude 规划后，Codex 会在这里自动执行。", en: "After Claude plans, Codex executes here automatically." },
   phPickFolder: { zh: "先选项目文件夹…", en: "Select a project folder first…" },
-  phConnectClaude: { zh: "请先连接 Claude…", en: "Connect Claude first…" },
-  phConnectCodex: { zh: "请先连接 Codex…", en: "Connect Codex first…" },
-  phConnectBoth: { zh: "请先连接 Claude 和 Codex…", en: "Connect Claude and Codex first…" },
-  phCollab: { zh: "描述你想做的，回车后 Claude 与 Codex 自动协作…", en: "Describe your goal; press Enter for auto collaboration…" },
-  phClaude: { zh: "和 Claude 聊聊你想做什么…（Enter 发送）", en: "Tell Claude what you want… (Enter to send)" },
-  phCodex: { zh: "让 Codex 帮你写代码、改文件…（Enter 发送）", en: "Ask Codex to code or edit files… (Enter to send)" },
+  phConnectMaster: { zh: "请先连接左栏（Master）…", en: "Connect the Master lane first…" },
+  phConnectSlave: { zh: "请先连接右栏（Slave）…", en: "Connect the Slave lane first…" },
+  phConnectBoth: { zh: "请先连接左右两栏…", en: "Connect both lanes first…" },
+  phCollab: { zh: "描述你想做的，回车后左右两栏自动协作…", en: "Describe your goal; press Enter for auto collaboration…" },
+  phMaster: { zh: "和左栏聊聊你想做什么…（Enter 发送）", en: "Tell the Master lane what you want… (Enter to send)" },
+  phSlave: { zh: "让右栏帮你写代码、改文件…（Enter 发送）", en: "Ask the Slave lane to code or edit files… (Enter to send)" },
   // ---- history & search ----
   explorer: { zh: "工作区", en: "Workspace" },
   historyTitle: { zh: "历史对话", en: "History" },
@@ -102,6 +102,16 @@ const STR = {
   proxyNoneHint: { zh: "直连，不走任何代理。", en: "Direct connection, no proxy." },
   proxyUrlLabel: { zh: "代理地址", en: "Proxy URL" },
   proxyApplyNote: { zh: "更改下一次请求即生效，无需重启。", en: "Applies on the next request — no restart needed." },
+  proxyScopeLabel: { zh: "作用范围", en: "Scope" },
+  scopeMaster: { zh: "仅 Master（左栏）", en: "Master only (left)" },
+  scopeSlave: { zh: "仅 Slave（右栏）", en: "Slave only (right)" },
+  scopeBoth: { zh: "全部", en: "Both" },
+  // ---- backend / deepseek ----
+  deepseekKeyPh: { zh: "DeepSeek API Key", en: "DeepSeek API Key" },
+  deepseekKeySet: { zh: "Key 已配置", en: "Key set" },
+  deepseekKeyEdit: { zh: "点击修改 API Key", en: "Click to edit API Key" },
+  // ---- history search ----
+  historySearchPh: { zh: "搜索历史对话内容…", en: "Search conversation content…" },
 } as const;
 
 type Key = keyof typeof STR;

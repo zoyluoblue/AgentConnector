@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n";
-import type { AppSettings, ProxyMode, ThemeMode } from "../../../shared/ipc";
+import type { AppSettings, ProxyMode, ProxyScope, ThemeMode } from "../../../shared/ipc";
 
 interface Props {
   settings: AppSettings | null;
@@ -54,8 +54,10 @@ export function SettingsView({ settings, onChange }: Props) {
 
   const theme = settings?.theme ?? "system";
   const proxyMode = settings?.proxyMode ?? "system";
+  const proxyScope = settings?.proxyScope ?? "both";
   const setTheme = (m: ThemeMode) => onChange({ theme: m });
   const setProxyMode = (m: ProxyMode) => onChange({ proxyMode: m });
+  const setProxyScope = (s: ProxyScope) => onChange({ proxyScope: s });
   const commitUrl = () => {
     const v = url.trim();
     if (v !== (settings?.proxyUrl ?? "")) onChange({ proxyUrl: v });
@@ -104,6 +106,25 @@ export function SettingsView({ settings, onChange }: Props) {
                 onClick={() => setProxyMode("none")}
               />
             </div>
+            {proxyMode !== "none" && (
+              <div className="mt-4">
+                <span className="block text-label-caps font-bold text-on-surface-variant/70 mb-1.5">{t("proxyScopeLabel")}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(["master", "slave", "both"] as ProxyScope[]).map((s) => (
+                    <button
+                      type="button"
+                      key={s}
+                      onClick={() => setProxyScope(s)}
+                      className={`px-3 py-1 rounded-full text-body-sm font-medium transition-colors ${
+                        proxyScope === s ? "bg-primary text-white" : "bg-surface-container text-on-surface-variant hover:text-on-surface"
+                      }`}
+                    >
+                      {t(s === "master" ? "scopeMaster" : s === "slave" ? "scopeSlave" : "scopeBoth")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {proxyMode === "custom" && (
               <div className="mt-4">
                 <label htmlFor="proxy-url" className="block text-label-caps font-bold text-on-surface-variant/70 mb-1.5">

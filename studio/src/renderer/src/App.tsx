@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "./i18n";
-import type { ActivityState, AgentKind, AppSettings, AuthState, BusyState, ChatMessage, Mode, ProjectInfo } from "../../shared/ipc";
+import type { ActivityState, AgentKind, AppSettings, AuthState, Backend, BusyState, ChatMessage, Lane, Mode, ProjectInfo } from "../../shared/ipc";
 import { AgentPanel } from "./components/AgentPanel";
 import { HistoryView } from "./components/HistoryView";
-import { SearchView } from "./components/SearchView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar, type View } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
@@ -28,6 +27,14 @@ const CODEX_MODELS = [
   { v: "gpt-5.4-mini", label: "GPT-5.4-Mini" },
   { v: "gpt-5.3-codex-spark", label: "GPT-5.3-Codex-Spark" },
 ];
+const DEEPSEEK_MODELS = [
+  { v: "", label: "默认 (deepseek-chat)" },
+  { v: "deepseek-chat", label: "deepseek-chat" },
+  { v: "deepseek-reasoner", label: "deepseek-reasoner (R1)" },
+];
+const MODELS: Record<Backend, { v: string; label: string }[]> = { claude: CLAUDE_MODELS, codex: CODEX_MODELS, deepseek: DEEPSEEK_MODELS };
+const MASTER_BACKENDS: Backend[] = ["claude", "codex", "deepseek"];
+const SLAVE_BACKENDS: Backend[] = ["claude", "codex"];
 
 export function App() {
   const { t } = useLang();
@@ -42,13 +49,12 @@ export function App() {
   const initialHash = useMemo(() => new URLSearchParams(window.location.hash.slice(1)), []);
   const [view, setView] = useState<View>(() => {
     const h = initialHash.get("view");
-    return h === "history" || h === "search" || h === "settings" ? h : "chat";
+    return h === "history" || h === "settings" ? h : "chat";
   });
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [focusId, setFocusId] = useState<string | undefined>();
   const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Briefly mark a message for scroll-to + highlight, then release it so live tailing resumes.
   const focusMessage = (id: string) => {
     if (focusTimer.current) clearTimeout(focusTimer.current);
     setFocusId(id);
@@ -74,7 +80,6 @@ export function App() {
     const offAuth = window.studio.onAuth(setAuth);
     const offMode = window.studio.onMode(setMode);
     const offSession = window.studio.onSessionLoad((p) => {
-      // A saved conversation was resumed into the live chat — swap state in one shot.
       setProject(p.project);
       setMode(p.mode);
       setMessages(p.messages);
@@ -119,64 +124,86 @@ export function App() {
   const claudeMsgs = useMemo(() => messages.filter((m) => m.lane === "claude"), [messages]);
   const codexMsgs = useMemo(() => messages.filter((m) => m.lane === "codex"), [messages]);
 
-  const connect = async (kind: AgentKind) => {
-    setConnecting((c) => ({ ...c, [kind]: true }));
+  const dsKey = settings?.deepseekApiKey ?? "";
+  const backendOf = (kind: AgentKind): Backend =>
+    (kind === "claude" ? settings?.masterBackend : settings?.slaveBackend) ?? (kind === "claude" ? "claude" : "codex");
+  const laneReady = (kind: AgentKind): boolean => {
+    const b = backendOf(kind);
+    return b === "deepseek" ? !!dsKey : auth[b].connected;
+  };
+
+  const connect = async (backend: AgentKind) => {
+    setConnecting((c) => ({ ...c, [backend]: true }));
     try {
-      const st = await window.studio.connect(kind);
-      setAuth((a) => ({ ...a, [kind]: st }));
+      const st = await window.studio.connect(backend);
+      setAuth((a) => ({ ...a, [backend]: st }));
     } finally {
-      setConnecting((c) => ({ ...c, [kind]: false }));
+      setConnecting((c) => ({ ...c, [backend]: false }));
     }
   };
   const changeMode = (m: Mode) => {
     setMode(m);
     window.studio.setMode(m);
   };
-  const changeModel = (agent: AgentKind, v: string) => {
-    setModels((mm) => ({ ...mm, [agent]: v }));
-    window.studio.setModel(agent, v);
+  const changeModel = (kind: AgentKind, v: string) => {
+    setModels((mm) => ({ ...mm, [kind]: v }));
+    window.studio.setModel(kind, v);
+  };
+  const changeBackend = (kind: AgentKind, b: Backend) => {
+    void changeSettings(kind === "claude" ? { masterBackend: b } : { slaveBackend: b });
+    changeModel(kind, ""); // reset model when the backend changes
   };
   const pick = () => {
     setView("chat");
     void window.studio.pickProject();
   };
 
-  const headerProps = (kind: AgentKind) => ({
-    kind,
-    name: kind === "claude" ? "Claude" : "Codex",
-    role: t(kind === "claude" ? "planReview" : "codeExec"),
-    status: auth[kind],
-    connecting: connecting[kind],
-    activity: activity[kind],
-    onConnect: () => void connect(kind),
-    models: kind === "claude" ? CLAUDE_MODELS : CODEX_MODELS,
-    model: models[kind],
-    onModel: (v: string) => changeModel(kind, v),
-  });
+  const headerProps = (kind: AgentKind) => {
+    const lane: Lane = kind === "claude" ? "master" : "slave";
+    const backend = backendOf(kind);
+    return {
+      kind,
+      lane,
+      backend,
+      backendOptions: kind === "claude" ? MASTER_BACKENDS : SLAVE_BACKENDS,
+      onBackend: (b: Backend) => changeBackend(kind, b),
+      status: backend === "deepseek" ? { connected: !!dsKey } : auth[backend],
+      connecting: backend === "deepseek" ? false : connecting[backend],
+      onConnect: () => {
+        if (backend !== "deepseek") void connect(backend);
+      },
+      models: MODELS[backend],
+      model: models[kind],
+      onModel: (v: string) => changeModel(kind, v),
+      deepseekKey: dsKey,
+      onDeepseekKey: (v: string) => void changeSettings({ deepseekApiKey: v }),
+    };
+  };
 
-  const claudeDisabled = !project.cwd || !auth.claude.connected || (collab && !auth.codex.connected);
+  const masterReady = !!project.cwd && laneReady("claude") && (!collab || laneReady("codex"));
   const claudeComposer = {
     busy: collab ? anyBusy : busy.claude,
-    disabled: claudeDisabled,
+    disabled: !masterReady,
     placeholder: !project.cwd
       ? t("phPickFolder")
-      : claudeDisabled
+      : !masterReady
         ? collab
           ? t("phConnectBoth")
-          : t("phConnectClaude")
+          : t("phConnectMaster")
         : collab
           ? t("phCollab")
-          : t("phClaude"),
+          : t("phMaster"),
     onSend: (x: string) => void window.studio.send(x, "claude"),
     onStop: () => window.studio.abort("claude"),
   };
 
+  const slaveReady = !!project.cwd && laneReady("codex");
   const codexComposer = collab
     ? undefined
     : {
         busy: busy.codex,
-        disabled: !project.cwd || !auth.codex.connected,
-        placeholder: !project.cwd ? t("phPickFolder") : !auth.codex.connected ? t("phConnectCodex") : t("phCodex"),
+        disabled: !slaveReady,
+        placeholder: !project.cwd ? t("phPickFolder") : !slaveReady ? t("phConnectSlave") : t("phSlave"),
         onSend: (x: string) => void window.studio.send(x, "codex"),
         onStop: () => window.studio.abort("codex"),
       };
@@ -190,15 +217,6 @@ export function App() {
           <SettingsView settings={settings} onChange={changeSettings} />
         ) : view === "history" ? (
           <HistoryView />
-        ) : view === "search" ? (
-          <SearchView
-            currentMessages={messages}
-            initialQuery={initialHash.get("q") ?? ""}
-            onJumpCurrent={(id) => {
-              setView("chat");
-              focusMessage(id);
-            }}
-          />
         ) : (
           <div className="flex-1 min-h-0 flex p-gutter gap-gutter bg-surface-container-lowest">
             <AgentPanel
@@ -209,6 +227,7 @@ export function App() {
               emptySub={collab ? t("claudeSubCollab") : t("claudeSubSolo")}
               composer={claudeComposer}
               focusId={focusId}
+              activity={activity.claude}
             />
             <AgentPanel
               header={headerProps("codex")}
@@ -218,6 +237,7 @@ export function App() {
               emptySub={collab ? t("codexSubCollab") : t("codexSub")}
               composer={codexComposer}
               focusId={focusId}
+              activity={activity.codex}
             />
           </div>
         )}
