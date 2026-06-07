@@ -1,6 +1,6 @@
 {
   "name": "agent-studio",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "AgentStudio — friendly Mac desktop app to chat with Claude (plan/review) and Codex (code), in single or orchestrated mode.",
   "author": "ZoyLuo",
   "private": true,
