@@ -1,0 +1,20 @@
+appId: com.zoyluo.agentstudio
+productName: AgentStudio
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# The whole app (main/preload/renderer) is bundled into out/ by electron-vite,
+# so there are no runtime node_modules to ship.
+asar: true
+# Ad-hoc sign the .app (build/afterPack.cjs) so a self-built Apple-Silicon app can
+# launch. To distribute without the "unidentified developer" prompt, set a real
+# Developer ID identity below and add notarization.
+afterPack: ./build/afterPack.cjs
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+  identity: null
