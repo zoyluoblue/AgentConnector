@@ -1,6 +1,6 @@
 import { useLang } from "../i18n";
 
-export type View = "chat" | "history" | "settings";
+export type View = "chat" | "history" | "memory" | "settings";
 
 interface Props {
   onNewProject: () => void;
@@ -13,6 +13,7 @@ export function Sidebar({ onNewProject, view, onView }: Props) {
   const NAV: { icon: string; label: string; view?: View }[] = [
     { icon: "folder_open", label: t("explorer"), view: "chat" },
     { icon: "history", label: t("history"), view: "history" },
+    { icon: "neurology", label: t("memory"), view: "memory" },
     { icon: "extension", label: t("extensions") },
   ];
   return (

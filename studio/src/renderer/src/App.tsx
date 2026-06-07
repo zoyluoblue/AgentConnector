@@ -17,6 +17,7 @@ import type {
 } from "../../shared/ipc";
 import { AgentPanel } from "./components/AgentPanel";
 import { HistoryView } from "./components/HistoryView";
+import { MemoryView } from "./components/MemoryView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar, type View } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
@@ -42,7 +43,7 @@ export function App() {
   const initialHash = useMemo(() => new URLSearchParams(window.location.hash.slice(1)), []);
   const [view, setView] = useState<View>(() => {
     const h = initialHash.get("view");
-    return h === "history" || h === "settings" ? h : "chat";
+    return h === "history" || h === "settings" || h === "memory" ? h : "chat";
   });
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [focusId, setFocusId] = useState<string | undefined>();
@@ -256,6 +257,8 @@ export function App() {
           <SettingsView settings={settings} onChange={changeSettings} />
         ) : view === "history" ? (
           <HistoryView />
+        ) : view === "memory" ? (
+          <MemoryView project={project} />
         ) : (
           <div className="flex-1 min-h-0 flex p-gutter gap-gutter bg-surface-container-lowest">
             <AgentPanel

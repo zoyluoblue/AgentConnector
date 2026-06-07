@@ -11,6 +11,7 @@ import {
   CH,
   type ChatMessage,
   type Lane,
+  type MemoryScope,
   type Mode,
   type ModelOption,
   type MsgKind,
@@ -25,6 +26,15 @@ import { DEEPSEEK_EXECUTOR_SYSTEM, applyFiles, askDeepseek, parseFileBlocks } fr
 import { changesSince, projectContext, snapshot } from "./diff.js";
 import { fixPath } from "./fixPath.js";
 import { log, setLogFile, setLogSink } from "./log.js";
+import {
+  appendMemory,
+  getGlobalMemory,
+  getProjectMemory,
+  initMemory,
+  memoryContext,
+  setGlobalMemory,
+  setProjectMemory,
+} from "./memory.js";
 import { apiKeyFor, backendFor, connectMethodFor, getSettings, initSettings, updateSettings } from "./settings.js";
 import * as store from "./store.js";
 
@@ -153,6 +163,9 @@ async function laneTurn(kind: AgentKind, prompt: string, system: string, phase: 
   const name = BACKEND_NAME[backend];
   // api-key method: hand the CLI/driver the configured key; app method leaves it undefined (uses login).
   const apiKey = connectMethodFor(backend) === "key" ? apiKeyFor(backend) || undefined : undefined;
+  // Long-term memory injected so every backend reads the same notes (see memory.ts).
+  const mem = memoryContext(projectCwd);
+  const withMem = (s: string) => (mem ? `${mem}\n\n${s}` : s);
   const pid = post(kind, write ? "progress" : "text", write ? `${name} 正在处理…` : "", true, undefined, kind, name);
   setActivity(kind, phase);
   aborts[kind] = new AbortController();
@@ -166,7 +179,7 @@ async function laneTurn(kind: AgentKind, prompt: string, system: string, phase: 
       prompt,
       cwd: projectCwd as string,
       sessionId: claudeSessions[kind],
-      systemPrompt: system,
+      systemPrompt: withMem(system),
       disableTools: !write,
       allowWrite: write,
       lane,
@@ -178,8 +191,11 @@ async function laneTurn(kind: AgentKind, prompt: string, system: string, phase: 
     if (r.sessionId) claudeSessions[kind] = r.sessionId;
     res = { ok: r.ok, text: r.text, error: r.error };
   } else if (backend === "codex") {
+    // Codex has no system-prompt flag, so inject memory into the prompt — but only on a
+    // fresh thread, since `resume` already carries the earlier (memory-bearing) turns.
+    const codexPrompt = mem && !codexThreads[kind] ? `${mem}\n\n${prompt}` : prompt;
     const r = await askCodex({
-      prompt,
+      prompt: codexPrompt,
       cwd: projectCwd as string,
       threadId: codexThreads[kind],
       sandbox: write ? "workspace-write" : "read-only",
@@ -198,7 +214,7 @@ async function laneTurn(kind: AgentKind, prompt: string, system: string, phase: 
     // (with the current files as context) and WE write them; the master then reviews the diff.
     const ctx = projectContext(projectCwd as string);
     const full = `${prompt}\n\n当前项目文件（在此基础上新建/修改；为空则从零创建）：\n${ctx || "（空项目）"}`;
-    const r = await askDeepseek({ prompt: full, systemPrompt: DEEPSEEK_EXECUTOR_SYSTEM, model, apiKey: apiKeyFor("deepseek"), signal });
+    const r = await askDeepseek({ prompt: full, systemPrompt: withMem(DEEPSEEK_EXECUTOR_SYSTEM), model, apiKey: apiKeyFor("deepseek"), signal });
     if (!r.ok) {
       res = { ok: false, text: "", error: r.error };
     } else {
@@ -212,7 +228,7 @@ async function laneTurn(kind: AgentKind, prompt: string, system: string, phase: 
       res = { ok: true, text: (prose || "（已处理）") + summary };
     }
   } else {
-    const r = await askDeepseek({ prompt, systemPrompt: system, model, apiKey: apiKeyFor("deepseek"), signal });
+    const r = await askDeepseek({ prompt, systemPrompt: withMem(system), model, apiKey: apiKeyFor("deepseek"), signal });
     res = { ok: r.ok, text: r.text, error: r.error };
   }
 
@@ -273,6 +289,17 @@ async function runOrchestration(goal: string): Promise<void> {
 async function handleSend(text: string, target: AgentKind): Promise<void> {
   if (!projectCwd) {
     post("system", "error", "请先选择一个项目文件夹。", false, undefined, target);
+    return;
+  }
+
+  // 记住：xxx — store a fact in long-term memory instead of running a turn.
+  const remember = text.match(/^\s*(?:记住|remember)\s*(?:[:：]|\s)\s*([\s\S]+?)\s*$/i);
+  if (remember?.[1]) {
+    const fact = remember[1].trim();
+    appendMemory(projectCwd, fact);
+    post("user", "text", text, false, undefined, target);
+    post("system", "text", `🧠 已记住（${projectCwd ? "项目记忆" : "全局记忆"}）：${fact}`, false, undefined, target);
+    log("memory.remember", { lane: target, len: fact.length });
     return;
   }
 
@@ -503,6 +530,7 @@ app.whenReady().then(() => {
   setLogSink((line) => send(CH.logLine, line));
   store.initStore(join(app.getPath("userData"), "history"));
   initSettings(join(app.getPath("userData"), "settings.json"));
+  initMemory(join(app.getPath("userData"), "memory"));
   log("app.ready", { mode, userData: app.getPath("userData") });
 
   ipcMain.handle(CH.send, (_e, p: { text: string; target: AgentKind }) => handleSend(p.text, p.target));
@@ -560,6 +588,13 @@ app.whenReady().then(() => {
   ipcMain.handle(CH.settingsGet, () => getSettings());
   ipcMain.handle(CH.settingsSet, (_e, patch) => updateSettings(patch));
   ipcMain.handle(CH.modelsList, (_e, backend: Backend) => listModels(backend));
+
+  // ---- memory ----
+  ipcMain.handle(CH.memoryGet, (_e, scope: MemoryScope) => (scope === "global" ? getGlobalMemory() : getProjectMemory(projectCwd)));
+  ipcMain.handle(CH.memorySet, (_e, p: { scope: MemoryScope; content: string }) => {
+    if (p.scope === "global") setGlobalMemory(p.content);
+    else setProjectMemory(projectCwd, p.content);
+  });
 
   createWindow();
   app.on("activate", () => {

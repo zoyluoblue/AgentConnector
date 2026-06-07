@@ -102,6 +102,9 @@ export interface ModelOption {
   label: string;
 }
 
+/** Long-term memory scope: global (all projects) or the current project only. */
+export type MemoryScope = "global" | "project";
+
 /** User preferences, persisted to userData/settings.json. */
 export interface AppSettings {
   /** system = inherit env proxy; custom = use proxyUrl; none = no proxy */
@@ -160,6 +163,8 @@ export const CH = {
   settingsGet: "settings:get",
   settingsSet: "settings:set",
   modelsList: "models:list",
+  memoryGet: "memory:get",
+  memorySet: "memory:set",
 } as const;
 
 /** The surface exposed to the renderer as `window.studio`. */
@@ -206,4 +211,9 @@ export interface StudioApi {
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   /** Selectable models for a backend (Codex from its local cache, DeepSeek/Anthropic fetched live, Claude curated). */
   listModels(backend: Backend): Promise<ModelOption[]>;
+  // ---- memory ----
+  /** Read long-term memory for a scope (project scope returns "" when no project is open). */
+  getMemory(scope: MemoryScope): Promise<string>;
+  /** Replace long-term memory for a scope. */
+  setMemory(scope: MemoryScope, content: string): Promise<void>;
 }

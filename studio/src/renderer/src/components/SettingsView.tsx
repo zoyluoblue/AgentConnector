@@ -58,9 +58,14 @@ export function SettingsView({ settings, onChange }: Props) {
   const setTheme = (m: ThemeMode) => onChange({ theme: m });
   const setProxyMode = (m: ProxyMode) => onChange({ proxyMode: m });
   const setProxyScope = (s: ProxyScope) => onChange({ proxyScope: s });
-  const commitUrl = () => {
-    const v = url.trim();
-    if (v !== (settings?.proxyUrl ?? "")) onChange({ proxyUrl: v });
+  const [proxyFlash, setProxyFlash] = useState(false);
+  const proxyDirty = url.trim() !== (settings?.proxyUrl ?? "");
+  // Custom proxy now takes effect only on explicit save (no more apply-on-blur).
+  const saveUrl = () => {
+    if (!proxyDirty) return;
+    onChange({ proxyUrl: url.trim() });
+    setProxyFlash(true);
+    setTimeout(() => setProxyFlash(false), 1800);
   };
 
   return (
@@ -130,16 +135,26 @@ export function SettingsView({ settings, onChange }: Props) {
                 <label htmlFor="proxy-url" className="block text-label-caps font-bold text-on-surface-variant/70 mb-1.5">
                   {t("proxyUrlLabel")}
                 </label>
-                <input
-                  id="proxy-url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  onBlur={commitUrl}
-                  onKeyDown={(e) => e.key === "Enter" && commitUrl()}
-                  placeholder="http://127.0.0.1:7890"
-                  spellCheck={false}
-                  className="w-full bg-surface-container rounded-lg px-3 py-2 font-code text-body-lg text-on-surface placeholder:text-on-surface-variant/50 outline-none focus:ring-2 focus:ring-primary/30"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    id="proxy-url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && saveUrl()}
+                    placeholder="http://127.0.0.1:7890"
+                    spellCheck={false}
+                    className="flex-1 min-w-0 bg-surface-container rounded-lg px-3 py-2 font-code text-body-lg text-on-surface placeholder:text-on-surface-variant/50 outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveUrl}
+                    disabled={!proxyDirty}
+                    className="shrink-0 px-4 py-2 rounded-lg text-body-sm font-semibold text-white bg-primary hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {proxyDirty ? t("save") : t("saved")}
+                  </button>
+                </div>
+                {proxyFlash && <p className="text-body-sm text-[#27C93F] mt-1.5">{`✓ ${t("applied")}`}</p>}
               </div>
             )}
             <p className="text-body-sm text-on-surface-variant/70 mt-3 flex items-center gap-1.5">

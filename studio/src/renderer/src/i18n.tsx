@@ -6,6 +6,7 @@ const STR = {
   newProject: { zh: "新建项目", en: "New Project" },
   search: { zh: "搜索", en: "Search" },
   history: { zh: "历史", en: "History" },
+  memory: { zh: "记忆", en: "Memory" },
   extensions: { zh: "扩展", en: "Extensions" },
   settings: { zh: "设置", en: "Settings" },
   help: { zh: "帮助", en: "Help" },
@@ -115,6 +116,27 @@ const STR = {
   apiKeyEdit: { zh: "点击修改 API Key", en: "Click to edit API key" },
   // ---- history search ----
   historySearchPh: { zh: "搜索历史对话内容…", en: "Search conversation content…" },
+  // ---- shared actions ----
+  save: { zh: "保存", en: "Save" },
+  saved: { zh: "已保存", en: "Saved" },
+  applied: { zh: "已生效", en: "Applied" },
+  // ---- memory ----
+  memoryTitle: { zh: "记忆", en: "Memory" },
+  memorySub: {
+    zh: "这里的内容会注入到每次对话，Claude / Codex / DeepSeek 都会读取并遵循。",
+    en: "This is injected into every turn — Claude, Codex and DeepSeek all read and follow it.",
+  },
+  memGlobal: { zh: "全局记忆", en: "Global" },
+  memProject: { zh: "当前项目", en: "Current project" },
+  memPlaceholder: {
+    zh: "写下你希望所有模型长期记住的内容，例如：偏好、约定、项目背景、技术栈…（一行一条）",
+    en: "Write what you want every model to remember long-term — preferences, conventions, project context, tech stack… (one per line)",
+  },
+  memChars: { zh: "字数", en: "Characters" },
+  memHint: {
+    zh: "在对话框输入「记住：…」也可快速追加一条记忆。记忆过长会被截断，建议精简。",
+    en: "Type “记住：…” (remember: …) in chat to quickly append a note. Very long memory is truncated — keep it concise.",
+  },
 } as const;
 
 type Key = keyof typeof STR;
